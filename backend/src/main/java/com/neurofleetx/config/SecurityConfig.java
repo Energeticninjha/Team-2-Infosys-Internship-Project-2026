@@ -39,8 +39,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/vehicles/live").permitAll()
                 .requestMatchers("/api/fleet/**").permitAll()
                 
-                // Admin Only (RBAC Example)
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                // Admin Only (Relaxed for Dev/Demo with Mock Tokens)
+                .requestMatchers("/api/admin/**").permitAll()
                 
                 // Driver Only (Relaxed for Dev)
                 .requestMatchers("/api/driver/**").permitAll()
