@@ -101,6 +101,12 @@ public class VehicleController {
 
     @GetMapping("/{id}/health")
     public Map<String, Object> getVehicleHealth(@PathVariable Long id) {
-        return maintenanceService.predictMaintenance(id);
+        return maintenanceService.getVehicleHealthStats(id);
+    }
+
+    @PutMapping("/maintenance/reset/{id}")
+    public ResponseEntity<String> resetVehicleHealth(@PathVariable Long id) {
+        maintenanceService.resetHealth(id);
+        return ResponseEntity.ok("Vehicle health reset successfully");
     }
 }

@@ -75,6 +75,14 @@ public class DataSeeder implements CommandLineRunner {
         v.setLongitude(lng);
         v.setBatteryPercent(bat);
         v.setType(type);
+        
+        // Initialize Health Metrics if new
+        if (v.getEngineHealth() == null) v.setEngineHealth(95.0);
+        if (v.getTireWear() == null) v.setTireWear(10.0);
+        if (v.getBatteryHealth() == null) v.setBatteryHealth(98.0);
+        if (v.getOdometer() == null) v.setOdometer(0.0);
+        if (v.getNextMaintenanceDate() == null) v.setNextMaintenanceDate(LocalDateTime.now().plusMonths(3));
+
         v.setLastUpdate(LocalDateTime.now());
         vehicleRepo.save(v);
         System.out.println("✅ Seeded/Updated Vehicle " + id);

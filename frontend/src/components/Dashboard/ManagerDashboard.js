@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import HealthAnalytics from './HealthAnalytics';
 
 const ManagerDashboard = ({ logout }) => {
     const [activeView, setActiveView] = useState('tracking');
@@ -18,20 +19,30 @@ const ManagerDashboard = ({ logout }) => {
 
     useEffect(() => {
         const fetchManagerData = async () => {
+            const token = localStorage.getItem('token');
+            const config = { headers: { Authorization: `Bearer ${token}` } };
             try {
                 // Fetch stats from existing vehicle/user endpoints
-                const vRes = await axios.get('http://localhost:8080/api/vehicles');
-                const uRes = await axios.get('http://localhost:8080/api/admin/users'); // Reuse admin users for drivers
+                const vRes = await axios.get('http://localhost:8080/api/vehicles', config);
+                const uRes = await axios.get('http://localhost:8080/api/admin/users', config);
 
-                const activeCount = vRes.data.filter(v => v.status === 'Active' || v.status === 'BUSY').length;
-                const onlineDrivers = uRes.data.filter(u => u.role === 'DRIVER').length;
+                const vehicles = vRes.data || [];
+                const activeCount = vehicles.filter(v => v.status === 'Active' || v.status === 'BUSY').length;
+                const onlineDrivers = (uRes.data || []).filter(u => u.role === 'DRIVER').length;
+                const alertsCount = vehicles.filter(v => v.engineHealth < 30 || v.tireWear > 80 || v.batteryHealth < 30).length;
 
-                setFleetStats(prev => ({ ...prev, activeVehicles: activeCount, driversOnline: onlineDrivers }));
+                setFleetStats({
+                    activeVehicles: activeCount,
+                    driversOnline: onlineDrivers,
+                    pendingAlerts: alertsCount || 0,
+                    onTimeDelivery: 94.2
+                });
 
                 // Fetch bookings for active trips
-                const bRes = await axios.get('http://localhost:8080/api/bookings');
-                setTrips(bRes.data.filter(b => b.status === 'ENROUTE' || b.status === 'PICKED_UP'));
-                setPendingBookings(bRes.data.filter(b => b.status === 'PENDING' || !b.vehicle));
+                const bRes = await axios.get('http://localhost:8080/api/bookings', config);
+                const allBookings = bRes.data || [];
+                setTrips(allBookings.filter(b => b.status === 'ENROUTE' || b.status === 'PICKED_UP'));
+                setPendingBookings(allBookings.filter(b => b.status === 'PENDING' || !b.vehicle));
             } catch (error) {
                 console.error("Error fetching manager dashboard data", error);
             }
@@ -81,6 +92,14 @@ const ManagerDashboard = ({ logout }) => {
                         </li>
                         <li className="mb-2">
                             <button
+                                className={`nav-link btn btn-link text-white w-100 text-start rounded-3 ${activeView === 'health' ? 'bg-warning text-dark' : ''}`}
+                                onClick={() => setActiveView('health')}
+                            >
+                                <span className="me-2">🛠️</span> Health Analytics
+                            </button>
+                        </li>
+                        <li className="mb-2">
+                            <button
                                 className={`nav-link btn btn-link text-white w-100 text-start rounded-3 ${activeView === 'drivers' ? 'bg-warning text-dark' : ''}`}
                                 onClick={() => setActiveView('drivers')}
                             >
@@ -94,6 +113,8 @@ const ManagerDashboard = ({ logout }) => {
                         <h2 className="fw-bold m-0">👨‍💼 Manager Overview</h2>
                         <span className="badge bg-warning text-dark p-2 rounded-3">Shift Active</span>
                     </div>
+
+                    {activeView === 'health' && <HealthAnalytics />}
 
                     {activeView === 'tracking' && (
                         <div className="animate__animated animate__fadeIn">

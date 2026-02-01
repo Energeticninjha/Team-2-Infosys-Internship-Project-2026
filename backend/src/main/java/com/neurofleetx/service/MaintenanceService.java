@@ -3,11 +3,11 @@ package com.neurofleetx.service;
 import com.neurofleetx.model.Vehicle;
 import com.neurofleetx.repo.VehicleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class MaintenanceService {
@@ -15,48 +15,55 @@ public class MaintenanceService {
     @Autowired
     private VehicleRepository vehicleRepo;
 
-    // Module 4: Predictive Maintenance & Health Analytics
-    public Map<String, Object> predictMaintenance(Long vehicleId) {
-        Vehicle vehicle = vehicleRepo.findById(vehicleId)
-                .orElseThrow(() -> new RuntimeException("Vehicle not found"));
+    private static final double SERVICE_INTERVAL_KM = 5000.0;
 
-        Map<String, Object> healthReport = new HashMap<>();
-        Random rand = new Random();
-
-        // Simulate sensor data
-        int engineTemp = 80 + rand.nextInt(30); // 80-110 C
-        int tirePressure = 30 + rand.nextInt(10); // 30-40 PSI
-        int brakeWear = rand.nextInt(100); // 0-100%
-
-        healthReport.put("vehicleId", vehicle.getId());
-        healthReport.put("model", vehicle.getModel());
-        
-        Map<String, String> metrics = new HashMap<>();
-        metrics.put("Engine Temperature", engineTemp + "°C");
-        metrics.put("Tire Pressure", tirePressure + " PSI");
-        metrics.put("Brake Wear", brakeWear + "%");
-        metrics.put("Battery Health", "94%");
-        
-        healthReport.put("metrics", metrics);
-
-        // Predictive Logic
-        String prediction = "Healthy";
-        String action = "None";
-
-        if (engineTemp > 100) {
-            prediction = "Critical";
-            action = "Check Coolant System Immediately";
-        } else if (brakeWear > 80) {
-            prediction = "Warning";
-            action = "Replace Brake Pads soon";
-        } else if (vehicle.getBatteryPercent() != null && vehicle.getBatteryPercent() < 20) {
-            prediction = "Low Battery";
-            action = "Charge Vehicle";
+    @Scheduled(fixedRate = 60000) // Every minute for demo
+    public void predictMaintenance() {
+        List<Vehicle> vehicles = vehicleRepo.findAll();
+        for (Vehicle v : vehicles) {
+            // Logic: Predict date based on odometer vs interval
+            double remainingKm = SERVICE_INTERVAL_KM - (v.getOdometer() % SERVICE_INTERVAL_KM);
+            
+            // Simulating a prediction: If health is low, bring date closer
+            if (v.getEngineHealth() < 50 || v.getTireWear() > 70) {
+                v.setNextMaintenanceDate(LocalDateTime.now().plusDays(2));
+            } else if (v.getNextMaintenanceDate() == null) {
+                v.setNextMaintenanceDate(LocalDateTime.now().plusMonths(3));
+            }
+            
+            // Alert Check (Logic moved to Manager Dashboard via Status)
+            if (v.getEngineHealth() < 30 || v.getTireWear() > 80 || v.getBatteryHealth() < 30) {
+                if (!"Maintenance".equalsIgnoreCase(v.getStatus())) {
+                    // Critical Alert Level
+                    System.out.println("🚨 CRITICAL: Vehicle " + v.getId() + " requires urgent maintenance!");
+                }
+            }
+            
+            vehicleRepo.save(v);
         }
+    }
 
-        healthReport.put("status", prediction);
-        healthReport.put("recommendedAction", action);
-        
-        return healthReport;
+    public void resetHealth(Long vehicleId) {
+        vehicleRepo.findById(vehicleId).ifPresent(v -> {
+            v.setEngineHealth(100.0);
+            v.setTireWear(0.0);
+            v.setBatteryHealth(100.0);
+            v.setTirePressure(32.0);
+            v.setStatus("Active");
+            v.setNextMaintenanceDate(LocalDateTime.now().plusMonths(3));
+            vehicleRepo.save(v);
+            System.out.println("🛠️ Vehicle " + vehicleId + " health reset completed.");
+        });
+    }
+
+    public java.util.Map<String, Object> getVehicleHealthStats(Long id) {
+        Vehicle v = vehicleRepo.findById(id).orElseThrow(() -> new RuntimeException("Vehicle not found"));
+        java.util.Map<String, Object> stats = new java.util.HashMap<>();
+        stats.put("engine", v.getEngineHealth());
+        stats.put("tires", v.getTireWear());
+        stats.put("battery", v.getBatteryHealth());
+        stats.put("odometer", v.getOdometer());
+        stats.put("nextMaintenance", v.getNextMaintenanceDate());
+        return stats;
     }
 }

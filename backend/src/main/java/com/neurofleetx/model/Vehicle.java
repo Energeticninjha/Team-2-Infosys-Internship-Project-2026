@@ -39,10 +39,16 @@ public class Vehicle {
     private Integer batteryPercent;
     private Integer fuelPercent;
     
-    // Telemetry & Health (Module 2)
+    // Telemetry & Health (Module 2 & 4)
     private Double speed; // km/h
     private Double odometer; // total distance
     private Double tirePressure; // PSI
+    
+    // Module 4: Predictive Maintenance
+    private Double engineHealth; // 0-100
+    private Double tireWear; // 0-100
+    private Double batteryHealth; // 0-100
+    private LocalDateTime nextMaintenanceDate;
     
     private LocalDateTime lastUpdate;
 }
