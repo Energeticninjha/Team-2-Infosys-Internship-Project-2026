@@ -1,0 +1,36 @@
+# Root .gitignore for NeuroFleetX
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Backend (Java/Maven)
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/*.iml
+backend/.classpath
+backend/.project
+backend/.settings/
+backend/.factorypath
+backend/build/
+
+# Frontend (React/Node)
+frontend/node_modules/
+frontend/build/
+frontend/.pnp/
+frontend/.pnp.js
+frontend/coverage/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# Environment and Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+**/.env*
