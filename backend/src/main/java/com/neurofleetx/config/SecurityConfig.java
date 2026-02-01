@@ -45,7 +45,7 @@ public class SecurityConfig {
                 // Driver Only (Relaxed for Dev)
                 .requestMatchers("/api/driver/**").permitAll()
                 
-                // Default: Allow authenticated or just permit all for ease of demo if auth not fully wired on frontend
+                .requestMatchers("/api/recommendations/**").permitAll()
                 .requestMatchers("/api/**").permitAll() 
                 .anyRequest().authenticated()
             );

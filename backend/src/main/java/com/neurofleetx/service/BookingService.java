@@ -41,8 +41,51 @@ public class BookingService {
     @Autowired
     private RouteService routeService;
 
-    public List<Booking> getUserBookings(Long userId) {
-        return bookingRepo.findByUserId(userId);
+    public java.util.List<java.util.Map<String, Object>> getUserBookings(Long userId) {
+        List<Booking> trips = bookingRepo.findByUserId(userId);
+        java.util.List<java.util.Map<String, Object>> results = new java.util.ArrayList<>();
+        
+        for (Booking b : trips) {
+            // Lazy update: If scheduled time has passed, mark as CONFIRMED (In Progress)
+            if ("SCHEDULED".equals(b.getStatus()) && 
+                b.getScheduledStartTime() != null && 
+                !b.getScheduledStartTime().isAfter(LocalDateTime.now())) {
+                
+                b.setStatus("CONFIRMED");
+                b.setStartTime(b.getScheduledStartTime());
+                if (b.getVehicle() != null) {
+                    b.getVehicle().setStatus("Enroute");
+                    vehicleRepo.save(b.getVehicle());
+                }
+                bookingRepo.save(b);
+            }
+
+            java.util.Map<String, Object> map = new java.util.HashMap<>();
+            map.put("id", b.getId());
+            map.put("startLocation", b.getStartLocation());
+            map.put("endLocation", b.getEndLocation());
+            map.put("amount", b.getAmount());
+            map.put("status", b.getStatus());
+            map.put("estimatedDuration", b.getEstimatedDuration());
+            map.put("startTime", b.getStartTime());
+            map.put("scheduledStartTime", b.getScheduledStartTime());
+            map.put("endTime", b.getEndTime());
+            map.put("review", b.getReview());
+            map.put("rating", b.getRating());
+            
+            if (b.getVehicle() != null) {
+                java.util.Map<String, Object> vMap = new java.util.HashMap<>();
+                vMap.put("id", b.getVehicle().getId());
+                vMap.put("model", b.getVehicle().getModel());
+                vMap.put("numberPlate", b.getVehicle().getNumberPlate());
+                vMap.put("driverName", b.getVehicle().getDriverName());
+                vMap.put("driverContact", b.getVehicle().getDriverContact());
+                vMap.put("type", b.getVehicle().getType());
+                map.put("vehicle", vMap);
+            }
+            results.add(map);
+        }
+        return results;
     }
 
     public Booking createBooking(BookingRequest request) {
@@ -72,6 +115,8 @@ public class BookingService {
              throw new RuntimeException("Booking Failed: No Vehicles exist in the database.");
         }
 
+        LocalDateTime scheduledTime = request.getScheduledStartTime() != null ? request.getScheduledStartTime() : LocalDateTime.now();
+
         if (request.getStartLocation() != null && request.getEndLocation() != null) {
              List<RouteOption> routes = routeService.calculateRoutes(new RouteRequest(
                  request.getStartLocation(), request.getEndLocation(),
@@ -79,7 +124,7 @@ public class BookingService {
              ));
              
              if (!routes.isEmpty()) {
-                 simulationService.startTrip(vehicle.getId(), routes.get(0).getPath());
+                 simulationService.startTrip(vehicle.getId(), routes.get(0).getPath(), scheduledTime);
              }
         }
 
@@ -90,9 +135,19 @@ public class BookingService {
                 .endLocation(request.getEndLocation())
                 .estimatedDuration(request.getEstimatedTime())
                 .startTime(LocalDateTime.now())
+                .scheduledStartTime(scheduledTime)
                 .status("CONFIRMED")
                 .amount(request.getPrice())
                 .build();
+        
+        // If scheduled for > 5 mins from now, mark as SCHEDULED
+        if (scheduledTime.isAfter(LocalDateTime.now().plusMinutes(5))) {
+            booking.setStatus("SCHEDULED");
+            booking.setStartTime(null); // Ensure it doesn't show as active
+        } else {
+            vehicle.setStatus("Enroute");
+            vehicleRepo.save(vehicle);
+        }
                 
         return bookingRepo.save(booking);
     }
@@ -131,7 +186,89 @@ public class BookingService {
                 vehicleRepo.save(vehicle);
             }
         }
-        
         return booking;
+    }
+
+    public List<java.util.Map<String, Object>> getRecommendedVehicles(Long userId) {
+        try {
+            if (userId == null) userId = 1L;
+            List<Vehicle> all = vehicleRepo.findAll();
+            if (all == null) return new java.util.ArrayList<>();
+            
+            List<Vehicle> activeFleet = new java.util.ArrayList<>();
+            for (Vehicle v : all) {
+                if (v.getStatus() != null && (
+                    v.getStatus().equalsIgnoreCase("Active") || 
+                    v.getStatus().equalsIgnoreCase("Idle") || 
+                    v.getStatus().equalsIgnoreCase("Available") ||
+                    v.getStatus().equalsIgnoreCase("Enroute")
+                )) {
+                    activeFleet.add(v);
+                }
+            }
+
+            List<Booking> history = bookingRepo.findByUserId(userId);
+            List<Vehicle> results;
+            
+            if (history == null || history.isEmpty()) {
+                activeFleet.sort((v1, v2) -> Double.compare(
+                    v2.getDriverRating() != null ? v2.getDriverRating() : 0.0,
+                    v1.getDriverRating() != null ? v1.getDriverRating() : 0.0
+                ));
+                // Tag top 3 as AI Recommended
+                for (int i = 0; i < Math.min(3, activeFleet.size()); i++) {
+                    activeFleet.get(i).setAiRecommended(true);
+                }
+                results = activeFleet;
+            } else {
+                java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+                for (Booking b : history) {
+                    if (b.getVehicle() != null && b.getVehicle().getType() != null) {
+                        String t = b.getVehicle().getType();
+                        counts.put(t, counts.getOrDefault(t, 0) + 1);
+                    }
+                }
+                String freqType = "Sedan";
+                int maxCount = -1;
+                for (java.util.Map.Entry<String, Integer> entry : counts.entrySet()) {
+                    if (entry.getValue() > maxCount) { 
+                        maxCount = entry.getValue(); 
+                        freqType = entry.getKey(); 
+                    }
+                }
+                for (Vehicle v : activeFleet) {
+                    if (v.getType() != null && v.getType().equalsIgnoreCase(freqType)) {
+                        v.setAiRecommended(true);
+                    }
+                }
+                results = activeFleet;
+            }
+
+            List<java.util.Map<String, Object>> manualResults = new java.util.ArrayList<>();
+            for (Vehicle v : results) {
+                java.util.Map<String, Object> map = new java.util.HashMap<>();
+                map.put("id", v.getId());
+                map.put("model", v.getModel() != null ? v.getModel() : "Fleet Unit");
+                map.put("driverName", v.getDriverName() != null ? v.getDriverName() : "Unit Driver");
+                map.put("driverRating", v.getDriverRating() != null ? v.getDriverRating() : 4.8);
+                map.put("driverContact", v.getDriverContact() != null ? v.getDriverContact() : "+91 0000000000");
+                map.put("type", v.getType() != null ? v.getType() : "Sedan");
+                map.put("seats", v.getSeats() != null ? v.getSeats() : 4);
+                map.put("ev", v.getEv() != null ? v.getEv() : false);
+                map.put("numberPlate", v.getNumberPlate() != null ? v.getNumberPlate() : "TN XX 0000");
+                map.put("status", v.getStatus());
+                map.put("aiRecommended", v.getAiRecommended());
+                
+                // Add missing metrics for richer UI
+                map.put("fuelPercent", v.getFuelPercent() != null ? v.getFuelPercent() : 80);
+                map.put("batteryPercent", v.getBatteryPercent() != null ? v.getBatteryPercent() : 80);
+                
+                manualResults.add(map);
+            }
+            return manualResults;
+        } catch (Throwable t) {
+            System.err.println("Error in recommendations: " + t.getMessage());
+            return new java.util.ArrayList<>();
+        }
     }
 }

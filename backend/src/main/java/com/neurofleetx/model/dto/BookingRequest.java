@@ -15,5 +15,7 @@ public class BookingRequest {
     private String endLocation;
     private Double price;
     private String estimatedTime; // Matches frontend payload
-    private String routeId; 
+    private String routeId;
+    private LocalDateTime scheduledStartTime;
+    private Integer durationHours;
 }

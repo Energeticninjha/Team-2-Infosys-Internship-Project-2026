@@ -50,5 +50,8 @@ public class Vehicle {
     private Double batteryHealth; // 0-100
     private LocalDateTime nextMaintenanceDate;
     
+    @Transient
+    private Boolean aiRecommended = false;
+    
     private LocalDateTime lastUpdate;
 }

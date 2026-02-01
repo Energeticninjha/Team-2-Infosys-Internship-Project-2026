@@ -1,6 +1,7 @@
 package com.neurofleetx.controller;
 
 import com.neurofleetx.model.Booking;
+import com.neurofleetx.model.Vehicle;
 import com.neurofleetx.model.dto.BookingRequest;
 import com.neurofleetx.repo.BookingRepository;
 import com.neurofleetx.service.BookingService;
@@ -33,12 +34,12 @@ public class BookingController {
     
     // Module 5 Ext: "My Trips"
     @GetMapping("/user/{userId}")
-    public List<Booking> getUserBookings(@PathVariable Long userId) {
-        System.out.println("🔍 Fetching trips for User ID: " + userId);
-        List<Booking> trips = bookingRepo.findByUserId(userId);
-        System.out.println("✅ Found " + trips.size() + " trips for User " + userId);
-        return trips;
+    public List<java.util.Map<String, Object>> getUserBookings(@PathVariable Long userId) {
+        System.out.println("🔍 Fetching safe history for User ID: " + userId);
+        return bookingService.getUserBookings(userId);
     }
+
+
     
     @PutMapping("/{id}/status")
     public Booking updateBookingStatus(@PathVariable Long id, @RequestBody java.util.Map<String, String> statusData) {

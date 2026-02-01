@@ -25,16 +25,18 @@ public class VehicleSimulationService {
     private static class ActiveTrip {
         List<double[]> path;
         LocalDateTime startTime;
-        long totalDurationSeconds = 60; // Mock duration: 60 seconds per trip for demo
+        LocalDateTime scheduledStartTime; // New
+        long totalDurationSeconds = 60;
         
-        public ActiveTrip(List<double[]> path) {
+        public ActiveTrip(List<double[]> path, LocalDateTime scheduledStartTime) {
             this.path = path;
             this.startTime = LocalDateTime.now();
+            this.scheduledStartTime = scheduledStartTime != null ? scheduledStartTime : LocalDateTime.now();
         }
     }
 
-    public void startTrip(Long vehicleId, List<double[]> path) {
-        activeTrips.put(vehicleId, new ActiveTrip(path));
+    public void startTrip(Long vehicleId, List<double[]> path, LocalDateTime scheduledStartTime) {
+        activeTrips.put(vehicleId, new ActiveTrip(path, scheduledStartTime));
     }
 
     // Called by Controller to get live position
@@ -42,8 +44,19 @@ public class VehicleSimulationService {
         if (!activeTrips.containsKey(vehicle.getId())) return;
         
         ActiveTrip trip = activeTrips.get(vehicle.getId());
-        long secondsElapsed = Duration.between(trip.startTime, LocalDateTime.now()).getSeconds();
         
+        // If not yet time to start, don't move
+        if (LocalDateTime.now().isBefore(trip.scheduledStartTime)) {
+            return;
+        }
+
+        // Use scheduledStartTime as the reference for progress if it was in the past, 
+        // or NOW if it just started. 
+        // Actually, let's just use Duration from scheduledStartTime.
+        long secondsElapsed = Duration.between(trip.scheduledStartTime, LocalDateTime.now()).getSeconds();
+        
+        if (secondsElapsed < 0) secondsElapsed = 0; // Guard
+
         if (secondsElapsed >= trip.totalDurationSeconds) {
             // Trip Over
             activeTrips.remove(vehicle.getId());
@@ -54,7 +67,7 @@ public class VehicleSimulationService {
         double progress = (double) secondsElapsed / trip.totalDurationSeconds;
         int targetIndex = (int) (progress * (trip.path.size() - 1));
         
-        if (targetIndex < trip.path.size()) {
+        if (targetIndex < trip.path.size() && targetIndex >= 0) {
             double[] coords = trip.path.get(targetIndex);
             
             // Calculate Distance Delta for Odometer

@@ -48,7 +48,10 @@ const CustomerDashboard = ({ logout }) => {
     const [liveVehicles, setLiveVehicles] = useState([]);
     const [activeBooking, setActiveBooking] = useState(() => {
         const saved = localStorage.getItem('activeBooking');
-        return saved ? JSON.parse(saved) : null;
+        const parsed = saved ? JSON.parse(saved) : null;
+        // Fix: Do not load 'SCHEDULED' bookings as active, to prevent blocking the UI
+        if (parsed && parsed.status === 'SCHEDULED') return null;
+        return parsed;
     });
 
     // Persistent Route Path & Index
@@ -66,11 +69,25 @@ const CustomerDashboard = ({ logout }) => {
     const [myTrips, setMyTrips] = useState([]);
     const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
+    const [recommendations, setRecommendations] = useState([]);
+    const [filters, setFilters] = useState({ type: 'All', seats: 'All', engine: 'All' });
+    const [showBookingModal, setShowBookingModal] = useState(false);
+    const [bookingTime, setBookingTime] = useState('');
+    const [selectedDuration, setSelectedDuration] = useState(1);
 
-    // 1. Path Following Simulation Layer
+    // 1. Path Following Simulation Layer (Wait for Schedule)
     useEffect(() => {
         if (activeBooking && persistentRoute && currentIndex < persistentRoute.path.length) {
             const timer = setInterval(() => {
+                // Check if it's time to move
+                if (activeBooking.scheduledStartTime) {
+                    const sched = new Date(activeBooking.scheduledStartTime);
+                    if (sched > new Date()) {
+                        console.log("🕒 Scheduled ride: Waiting for pickup time...");
+                        return;
+                    }
+                }
+
                 const nextIndex = currentIndex + 1;
                 if (nextIndex < persistentRoute.path.length) {
                     setCurrentIndex(nextIndex);
@@ -133,6 +150,14 @@ const CustomerDashboard = ({ logout }) => {
         } catch (e) { return null; }
     };
 
+    // 3. Initialize Booking Time for Today
+    useEffect(() => {
+        const now = new Date();
+        const offset = now.getTimezoneOffset() * 60000;
+        const localISOTime = new Date(now - offset).toISOString().slice(0, 16);
+        setBookingTime(localISOTime);
+    }, []);
+
     const handleSearch = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -157,8 +182,27 @@ const CustomerDashboard = ({ logout }) => {
             });
             const data = await response.json();
             setRoutes(data);
-        } catch (error) { alert("Error calculating route."); }
-        finally { setLoading(false); }
+            setLoading(false);
+
+            // Fetch AI Recommendations (Decoupled)
+            try {
+                const uid = localStorage.getItem('userId') || 1;
+                const recRes = await axios.get(`http://localhost:8080/api/recommendations/${uid}`);
+                setRecommendations(recRes.data);
+            } catch (recError) {
+                console.warn("Recommendations fetch failed:", recError);
+            }
+        } catch (error) {
+            console.error("Route Error:", error);
+            alert("Error calculating route. Please check the backend connection.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const openBookingModal = (vehicle) => {
+        setSelectedVehicle(vehicle);
+        setShowBookingModal(true);
     };
 
     const confirmBooking = async () => {
@@ -172,9 +216,11 @@ const CustomerDashboard = ({ logout }) => {
                 vehicleId: selectedVehicle.id,
                 startLocation: pickup,
                 endLocation: drop,
-                price: 150.0 + (Math.random() * 50),
+                price: (150 + (selectedVehicle.id || 0) * 10) + (selectedDuration * 125),
                 estimatedTime: routeObj?.duration || "20 mins",
-                routeId: selectedRouteId
+                routeId: selectedRouteId,
+                scheduledStartTime: bookingTime ? new Date(bookingTime).toISOString() : new Date().toISOString(),
+                durationHours: selectedDuration
             };
 
             const response = await fetch('http://localhost:8080/api/bookings', {
@@ -185,6 +231,17 @@ const CustomerDashboard = ({ logout }) => {
 
             if (response.ok) {
                 const bookingData = await response.json();
+
+                // If Scheduled, don't block the UI. Just show trips.
+                if (bookingData.status === 'SCHEDULED') {
+                    alert("✅ Ride Scheduled Successfully! You can view it in 'My Trips'. Tracking will start at the scheduled time.");
+                    setRoutes([]);
+                    setShowBookingModal(false);
+                    loadMyTrips(); // Refresh trips
+                    setViewMode('trips');
+                    return;
+                }
+
                 setActiveBooking(bookingData);
 
                 const routeData = {
@@ -201,6 +258,7 @@ const CustomerDashboard = ({ logout }) => {
                 localStorage.setItem('currentIndex', '0');
 
                 setRoutes([]);
+                setShowBookingModal(false);
             }
         } catch (error) { }
     };
@@ -338,30 +396,79 @@ const CustomerDashboard = ({ logout }) => {
                                                 ))}
                                             </div>
 
-                                            <h6 className="text-muted fw-bold mb-3 small text-uppercase">Available Vehicles</h6>
-                                            <div className="list-group mb-3">
-                                                {liveVehicles.map(v => (
-                                                    <button key={v.id} className={`list-group-item list-group-item-action border-0 mb-2 rounded-3 shadow-sm p-3 ${selectedVehicle?.id === v.id ? 'border-2 border-primary' : ''}`} onClick={() => setSelectedVehicle(v)}>
-                                                        <div className="d-flex justify-content-between align-items-start">
-                                                            <div>
-                                                                <h6 className="mb-0 fw-bold">{v.model}</h6>
-                                                                <small className="text-muted">{v.numberPlate}</small>
-                                                            </div>
-                                                            <span className="badge bg-warning text-dark">⭐ {v.driverRating}</span>
-                                                        </div>
-                                                        <div className="d-flex justify-content-between mt-2 small">
-                                                            <div className="d-flex align-items-center">
-                                                                <span className="text-secondary me-3">👤 {v.driverName}</span>
-                                                                <span className="badge bg-light text-dark border">💺 {v.seats || 4} Seats</span>
-                                                            </div>
-                                                            <span className="fw-bold text-success">₹{150 + v.id * 10}</span>
-                                                        </div>
+                                            <div className="d-flex justify-content-between align-items-center mb-3">
+                                                <h6 className="text-muted fw-bold mb-0 small text-uppercase">Recommended For You</h6>
+                                                <div className="dropdown">
+                                                    <button className="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                        Filters
                                                     </button>
-                                                ))}
+                                                    <ul className="dropdown-menu p-3 shadow border-0 rounded-4" style={{ minWidth: '200px' }}>
+                                                        <li className="mb-2">
+                                                            <label className="small fw-bold">Type</label>
+                                                            <select className="form-select form-select-sm" value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value })}>
+                                                                <option>All</option><option>Sedan</option><option>SUV</option><option>Luxury</option>
+                                                            </select>
+                                                        </li>
+                                                        <li className="mb-2">
+                                                            <label className="small fw-bold">Seats</label>
+                                                            <select className="form-select form-select-sm" value={filters.seats} onChange={e => setFilters({ ...filters, seats: e.target.value })}>
+                                                                <option>All</option><option>4</option><option>6</option><option>7</option>
+                                                            </select>
+                                                        </li>
+                                                        <li>
+                                                            <div className="form-check form-switch mt-2">
+                                                                <input className="form-check-input" type="checkbox" checked={filters.engine === 'EV'} onChange={e => setFilters({ ...filters, engine: e.target.checked ? 'EV' : 'All' })} />
+                                                                <label className="form-check-label small fw-bold">EV Only</label>
+                                                            </div>
+                                                        </li>
+                                                    </ul>
+                                                </div>
                                             </div>
 
-                                            <button className="btn btn-success w-100 py-3 fw-bold shadow-lg rounded-3 mt-2" disabled={!selectedRouteId || !selectedVehicle} onClick={confirmBooking}>
-                                                CONFIRM RIDE
+                                            <div className="list-group mb-3">
+                                                {recommendations
+                                                    .filter(v => (filters.type === 'All' || v.type === filters.type) &&
+                                                        (filters.seats === 'All' || String(v.seats) === filters.seats) &&
+                                                        (filters.engine === 'All' || (filters.engine === 'EV' && v.ev)))
+                                                    .map(v => (
+                                                        <button key={v.id} className={`list-group-item list-group-item-action border-0 mb-3 rounded-4 shadow-sm p-3 position-relative overflow-hidden transition-all ${selectedVehicle?.id === v.id ? 'border-start border-4 border-primary bg-primary-subtle' : ''}`} onClick={() => openBookingModal(v)}>
+                                                            {v.aiRecommended && (
+                                                                <div className="position-absolute py-1 px-3 bg-primary text-white small fw-bold rounded-start-pill animate-glamor" style={{ top: '10px', right: '-5px', zIndex: 1, boxShadow: '0 0 15px rgba(13, 110, 253, 0.5)' }}>
+                                                                    ✨ AI Recommended
+                                                                </div>
+                                                            )}
+                                                            <div className="d-flex justify-content-between align-items-start">
+                                                                <div className="flex-grow-1">
+                                                                    <div className="d-flex align-items-center mb-1">
+                                                                        <h6 className="mb-0 fw-bold">{v.model || 'Standard Sedan'}</h6>
+                                                                        {v.ev && <span className="ms-2 badge bg-success-subtle text-success border border-success-subtle">EV</span>}
+                                                                        <span className="ms-2 badge bg-secondary-subtle text-secondary small">{v.status}</span>
+                                                                    </div>
+                                                                    <small className="text-secondary d-block mb-2">{v.numberPlate} • {v.type || 'Sedan'} • {v.seats || 4} Seats</small>
+                                                                    <div className="d-flex align-items-center gap-3">
+                                                                        <span className="small text-muted">👤 {v.driverName || 'Verified Driver'}</span>
+                                                                        <span className="small text-warning fw-bold">⭐ {Math.max(4.0, v.driverRating || 4.8).toFixed(1)}</span>
+                                                                        <span className="small text-info ml-2">🔋 {v.batteryPercent || v.fuelPercent || 80}%</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-end">
+                                                                    <h5 className="fw-bold mb-0 text-primary">₹{150 + v.id * 10}</h5>
+                                                                    <small className="text-muted">flat rate</small>
+                                                                </div>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                            </div>
+
+                                            {(!recommendations || recommendations.length === 0) && (
+                                                <div className="text-center py-4 bg-white rounded-4 shadow-sm border mb-4">
+                                                    <div className="display-6 mb-2">🔎</div>
+                                                    <p className="text-muted small px-3">Enter your destination to see smart vehicle recommendations tailored for you.</p>
+                                                </div>
+                                            )}
+
+                                            <button className="btn btn-outline-primary w-100 py-2 fw-bold rounded-3 mb-4" disabled={!selectedRouteId || !selectedVehicle} onClick={() => setShowBookingModal(true)}>
+                                                CONFIGURE & BOOK
                                             </button>
                                         </div>
                                     )}
@@ -425,7 +532,13 @@ const CustomerDashboard = ({ logout }) => {
                                                 <small className="text-muted">🚗 {trip.vehicle?.model || 'Fleet'}</small>
                                             </div>
                                             <div className="d-flex justify-content-between mt-2 pt-2 border-top align-items-center">
-                                                <small className="text-muted fw-bold">{formatHistoryDate(trip.startTime)}</small>
+                                                <div>
+                                                    {trip.status === 'SCHEDULED' ? (
+                                                        <small className="text-primary fw-bold d-block">🗓️ Scheduled: {formatHistoryDate(trip.scheduledStartTime)}</small>
+                                                    ) : (
+                                                        <small className="text-muted fw-bold d-block">{formatHistoryDate(trip.startTime)}</small>
+                                                    )}
+                                                </div>
                                                 <span className="fw-bold text-primary">₹{trip.amount}</span>
                                             </div>
                                         </div>
@@ -489,6 +602,72 @@ const CustomerDashboard = ({ logout }) => {
                 </div>
             </div>
 
+            {showBookingModal && (
+                <>
+                    <div className="modal-backdrop fade show" style={{ zIndex: 1100 }}></div>
+                    <div className="modal fade show d-block" style={{ zIndex: 1110 }}>
+                        <div className="modal-dialog modal-dialog-centered">
+                            <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                                <div className="modal-header bg-primary text-white border-0 p-4">
+                                    <h4 className="modal-title fw-bold">Professional Booking 🚗</h4>
+                                    <button type="button" className="btn-close btn-close-white" onClick={() => setShowBookingModal(false)}></button>
+                                </div>
+                                <div className="modal-body p-4">
+                                    <div className="card bg-light border-0 rounded-4 p-3 mb-4">
+                                        <div className="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 className="mb-1 fw-bold text-primary">{selectedVehicle?.model}</h6>
+                                                <small className="text-muted">{selectedVehicle?.type} • {selectedVehicle?.seats} Seater</small>
+                                            </div>
+                                            <div className="text-end">
+                                                <div className="badge bg-success mb-1">Available Now</div>
+                                                <h5 className="mb-0 fw-bold">₹{(150 + (selectedVehicle?.id || 0) * 10) + (selectedDuration * 125)}</h5>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="form-label small fw-bold text-uppercase text-muted">Pickup Schedule</label>
+                                        <div className="input-group">
+                                            <span className="input-group-text bg-white border-end-0">📅</span>
+                                            <input type="datetime-local" className="form-control border-start-0" value={bookingTime} onChange={e => setBookingTime(e.target.value)} min={new Date().toISOString().slice(0, 16)} />
+                                        </div>
+                                        <small className="text-muted mt-2 d-block">Schedule your ride in advance or keep it for now.</small>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="form-label d-flex justify-content-between small fw-bold text-uppercase text-muted">
+                                            <span>Reservation Duration</span>
+                                            <span className="text-primary">{selectedDuration} Hours</span>
+                                        </label>
+                                        <input type="range" className="form-range" min="1" max="12" step="1" value={selectedDuration} onChange={e => setSelectedDuration(parseInt(e.target.value))} />
+                                        <div className="d-flex justify-content-between x-small text-muted mt-1" style={{ fontSize: '0.75rem' }}>
+                                            <span>1 Hr</span>
+                                            <span>6 Hrs</span>
+                                            <span>12 Hrs</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="alert alert-warning border-0 rounded-4 p-3">
+                                        <div className="d-flex">
+                                            <span className="me-3 fs-3">💰</span>
+                                            <div>
+                                                <h6 className="mb-1 fw-bold">Transparent Pricing</h6>
+                                                <small>Base: ₹{150 + (selectedVehicle?.id || 0) * 10} + Service: ₹{selectedDuration * 125} (@ ₹125/hr)</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <button className="btn btn-primary w-100 py-3 fw-bold rounded-4 shadow-lg transition-all" onClick={confirmBooking}>
+                                        BOOK JOURNEY NOW
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+
             {showReviewModal && (
                 <>
                     <div className="modal-backdrop fade show" style={{ zIndex: 1050 }}></div>
@@ -519,6 +698,15 @@ const CustomerDashboard = ({ logout }) => {
                 .pointer { cursor: pointer; }
                 .selection-card:hover { transform: translateY(-5px); }
                 .selection-card.active { border: 2px solid #0d6efd !important; background: #f0f7ff; }
+                .transition-all { transition: all 0.3s ease; }
+                .animate-glamor {
+                    animation: glamor-pulse 3s infinite ease-in-out;
+                }
+                @keyframes glamor-pulse {
+                    0% { transform: scale(1); box-shadow: 0 0 5px rgba(13, 110, 253, 0.5); }
+                    50% { transform: scale(1.05); box-shadow: 0 0 20px rgba(13, 110, 253, 0.8); }
+                    100% { transform: scale(1); box-shadow: 0 0 5px rgba(13, 110, 253, 0.5); }
+                }
             `}</style>
         </div>
     );

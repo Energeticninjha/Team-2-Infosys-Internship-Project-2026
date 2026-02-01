@@ -29,6 +29,9 @@ public class VehicleController {
     @Autowired
     private VehicleSimulationService simulationService;
 
+    @Autowired
+    private com.neurofleetx.service.BookingService bookingService;
+
     @GetMapping
     public List<Vehicle> getAllVehicles() {
         return vehicleRepo.findAll();

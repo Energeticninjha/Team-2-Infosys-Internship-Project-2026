@@ -31,6 +31,7 @@ public class Booking {
     private String estimatedDuration; // e.g. "24 mins"
 
     private LocalDateTime startTime;
+    private LocalDateTime scheduledStartTime;
     private LocalDateTime endTime;
     
     private String status; // CONFIRMED, COMPLETED, CANCELLED
