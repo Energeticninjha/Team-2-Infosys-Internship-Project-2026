@@ -30,9 +30,21 @@ public class DriverController {
     @Autowired
     private BookingRepository bookingRepo;
 
+    @GetMapping("/debug/state")
+    public Map<String, Object> getDebugState() {
+        Map<String, Object> state = new HashMap<>();
+        state.put("totalBookings", bookingRepo.count());
+        state.put("allBookings", bookingRepo.findAll());
+        state.put("allVehicles", vehicleRepo.findAll());
+        return state;
+    }
+
     @GetMapping("/{driverName}/bookings")
     public List<Booking> getAssignedBookings(@PathVariable String driverName) {
-        return bookingRepo.findByVehicleDriverName(driverName);
+        System.out.println("🔍 [DriverController] Fetching bookings for Driver: [" + driverName + "]");
+        List<Booking> bookings = bookingRepo.findByVehicleDriverName(driverName);
+        System.out.println("✅ [DriverController] Found " + bookings.size() + " bookings for [" + driverName + "]");
+        return bookings;
     }
     
     @GetMapping("/{driverName}/telemetry")

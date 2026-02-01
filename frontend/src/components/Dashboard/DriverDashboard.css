@@ -10,6 +10,43 @@
     border-radius: 12px;
 }
 
+.floating-eta-card {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 1001;
+    background: white;
+    padding: 20px;
+    border-radius: 20px;
+    width: 220px;
+    border-left: 6px solid #2ecc71;
+}
+
+.pulse-dot {
+    width: 10px;
+    height: 10px;
+    background: #2ecc71;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.5);
+        opacity: 0.5;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
 .kpi-card:hover {
     transform: translateY(-5px);
 }
@@ -17,7 +54,7 @@
 .map-container {
     height: 600px;
     border-radius: 15px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 .job-card {

@@ -43,19 +43,22 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        System.out.println("🔐 Login Attempt for: " + request.getEmail());
+        System.out.println("🔐 [AuthService] Login Attempt for Email: [" + request.getEmail() + "]");
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> {
-                    System.out.println("❌ User not found: " + request.getEmail());
+                    System.err.println("❌ [AuthService] User NOT FOUND in database: [" + request.getEmail() + "]");
                     return new RuntimeException("User not found");
                 });
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-             System.out.println("❌ Password mismatch for: " + request.getEmail());
+        System.out.println("🔍 [AuthService] User found. Stored Hash starts with: " + (user.getPassword().length() > 10 ? user.getPassword().substring(0, 10) : "N/A"));
+        
+        boolean matches = passwordEncoder.matches(request.getPassword(), user.getPassword());
+        if (!matches) {
+             System.err.println("❌ [AuthService] Password MISMATCH for: [" + request.getEmail() + "]");
              throw new RuntimeException("Invalid credentials");
         }
 
-        System.out.println("✅ Login Successful for: " + request.getEmail() + " (Role: " + user.getRole() + ")");
+        System.out.println("✅ [AuthService] Login SUCCESS for: [" + request.getEmail() + "] Role: [" + user.getRole() + "]");
         return AuthResponse.builder()
                 .token("mock-jwt-token-" + user.getId())
                 .role(user.getRole())

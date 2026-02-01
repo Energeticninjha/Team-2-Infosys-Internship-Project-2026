@@ -26,6 +26,11 @@ public class BookingController {
         return bookingService.createBooking(request);
     }
     
+    @GetMapping
+    public List<Booking> getAllBookings() {
+        return bookingRepo.findAll();
+    }
+    
     // Module 5 Ext: "My Trips"
     @GetMapping("/user/{userId}")
     public List<Booking> getUserBookings(@PathVariable Long userId) {

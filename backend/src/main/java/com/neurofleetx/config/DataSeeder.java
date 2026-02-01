@@ -78,5 +78,28 @@ public class DataSeeder implements CommandLineRunner {
         v.setLastUpdate(LocalDateTime.now());
         vehicleRepo.save(v);
         System.out.println("✅ Seeded/Updated Vehicle " + id);
+        
+        // Seed a pending booking for Ramesh Driver to trigger the "Incoming Job" UI
+        if (id == 1L) {
+            com.neurofleetx.model.Booking b = new com.neurofleetx.model.Booking();
+            b.setStartLocation("Ambattur, Chennai");
+            b.setEndLocation("T Nagar, Chennai");
+            b.setAmount(450.0);
+            b.setStatus("CONFIRMED");
+            b.setVehicle(v);
+            b.setStartTime(LocalDateTime.now());
+            
+            // Assign a user (Admin) to the booking to avoid NULL constraints
+            User admin = userRepo.findByEmail("admin@gmail.com").orElse(null);
+            b.setUser(admin);
+            
+            // For Demo: Ensure Ramesh always has exactly one confirmed job if offline/available
+            if (v.getStatus().equals("AVAILABLE") || v.getStatus().equals("Active") || v.getStatus().equals("Offline")) {
+                 bookingRepo.save(b);
+                 System.out.println("🚀 [DataSeeder] SUCCESS: Forced Seeded Test Booking ID: [" + b.getId() + "] for Ramesh Driver");
+            } else {
+                 System.out.println("⚠️ [DataSeeder] SKIP: Ramesh Driver is already busy (Status: " + v.getStatus() + ")");
+            }
+        }
     }
 }

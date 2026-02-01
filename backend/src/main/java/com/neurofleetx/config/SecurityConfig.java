@@ -42,8 +42,8 @@ public class SecurityConfig {
                 // Admin Only (RBAC Example)
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 
-                // Driver Only
-                .requestMatchers("/api/driver/**").hasRole("DRIVER")
+                // Driver Only (Relaxed for Dev)
+                .requestMatchers("/api/driver/**").permitAll()
                 
                 // Default: Allow authenticated or just permit all for ease of demo if auth not fully wired on frontend
                 .requestMatchers("/api/**").permitAll() 

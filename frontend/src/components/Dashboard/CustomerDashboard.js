@@ -315,16 +315,26 @@ const CustomerDashboard = ({ logout }) => {
 
                                     {routes.length > 0 && (
                                         <div className="mt-4">
-                                            <h6 className="text-muted fw-bold mb-3 small text-uppercase">Recommended Routes</h6>
-                                            <div className="list-group mb-4">
+                                            <div className="row g-3 mb-4">
                                                 {routes.map(r => (
-                                                    <button key={r.id} className={`list-group-item list-group-item-action border-0 mb-2 rounded-3 shadow-sm d-flex justify-content-between align-items-center ${selectedRouteId === r.id ? 'bg-primary text-white' : ''}`} onClick={() => setSelectedRouteId(r.id)}>
-                                                        <div>
-                                                            <div className="fw-bold">{r.mode} Path</div>
-                                                            <small className={selectedRouteId === r.id ? 'text-white-50' : 'text-muted'}>{r.distance}</small>
+                                                    <div key={r.id} className="col-6">
+                                                        <div
+                                                            className={`card h-100 border-0 shadow-sm rounded-4 cursor-pointer selection-card ${selectedRouteId === r.id ? 'active' : ''}`}
+                                                            onClick={() => setSelectedRouteId(r.id)}
+                                                            style={{ cursor: 'pointer', transition: '0.3s' }}
+                                                        >
+                                                            <div className={`card-header border-0 py-2 rounded-top-4 ${r.mode.includes('Blue') ? 'bg-primary' : 'bg-success'} text-white`}>
+                                                                <small className="fw-bold">{r.mode}</small>
+                                                            </div>
+                                                            <div className="card-body p-3">
+                                                                <h5 className="fw-bold mb-0">{r.duration}</h5>
+                                                                <small className="text-muted">{r.distance}</small>
+                                                                <div className="mt-2">
+                                                                    <span className="badge bg-light text-dark border">{r.trafficStatus}</span>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <span className={`badge ${selectedRouteId === r.id ? 'bg-light text-primary' : 'bg-primary'}`}>{r.duration}</span>
-                                                    </button>
+                                                    </div>
                                                 ))}
                                             </div>
 
@@ -433,7 +443,20 @@ const CustomerDashboard = ({ logout }) => {
 
                         {persistentRoute && (
                             <>
-                                <Polyline positions={persistentRoute.path} pathOptions={{ color: '#0d6efd', weight: 8, opacity: 0.7 }} />
+                                {/* Segmented Polyline for Active Ride */}
+                                {persistentRoute.path.map((point, i) => {
+                                    if (i === 0) return null;
+                                    const prevPoint = persistentRoute.path[i - 1];
+                                    // Simulated Traffic zones: red for slow, green for fast
+                                    const color = i % 10 < 3 ? '#ff4d4d' : '#2ecc71';
+                                    return (
+                                        <Polyline
+                                            key={i}
+                                            positions={[prevPoint, point]}
+                                            pathOptions={{ color, weight: 8, opacity: 0.9 }}
+                                        />
+                                    );
+                                })}
                                 <Marker position={persistentRoute.pickup}><Popup>Pickup</Popup></Marker>
                                 <Marker position={persistentRoute.drop}><Popup>Destination</Popup></Marker>
 
@@ -445,7 +468,15 @@ const CustomerDashboard = ({ logout }) => {
                         )}
 
                         {!activeBooking && routes.map(r => (
-                            <Polyline key={r.id} positions={r.path} pathOptions={{ color: selectedRouteId === r.id ? '#0d6efd' : '#999', weight: 6, opacity: 0.6 }} />
+                            <Polyline
+                                key={r.id}
+                                positions={r.path}
+                                pathOptions={{
+                                    color: r.mode.includes('Blue') ? '#0d6efd' : '#2ecc71',
+                                    weight: selectedRouteId === r.id ? 8 : 4,
+                                    opacity: selectedRouteId === r.id ? 0.8 : 0.4
+                                }}
+                            />
                         ))}
 
                         {/* Hide other vehicles if ride is active */}
@@ -486,6 +517,8 @@ const CustomerDashboard = ({ logout }) => {
             <style>{`
                 .vehicle-marker-transition { transition: all 2.1s linear; }
                 .pointer { cursor: pointer; }
+                .selection-card:hover { transform: translateY(-5px); }
+                .selection-card.active { border: 2px solid #0d6efd !important; background: #f0f7ff; }
             `}</style>
         </div>
     );

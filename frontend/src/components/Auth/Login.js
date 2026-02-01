@@ -27,8 +27,9 @@ const Login = ({ updateToken, setRole }) => {
                 const normalizedRole = data.role.toLowerCase(); // 'admin', 'customer'
 
                 localStorage.setItem('role', normalizedRole);
-                localStorage.setItem('userId', data.id); // Fix: Store actual userId for Trip History
-                setRole(normalizedRole); // Update App state
+                localStorage.setItem('userId', data.id);
+                localStorage.setItem('name', data.name || '');
+                setRole(normalizedRole);
 
                 updateToken(data.token); // Triggers App state update -> Redirects
 

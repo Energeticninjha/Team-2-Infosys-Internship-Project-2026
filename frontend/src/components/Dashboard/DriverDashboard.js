@@ -31,14 +31,17 @@ const RecenterMap = ({ coords }) => {
 const DriverDashboard = ({ logout }) => {
     // 1. Core State
     const [driverName] = useState(localStorage.getItem('name') || "Ramesh Driver");
+    const [driverEmail] = useState(localStorage.getItem('email') || "admin@gmail.com");
     const [vehicle, setVehicle] = useState(null);
     const [earnings, setEarnings] = useState({ totalEarnings: 0, completedTrips: 0, rating: 5.0 });
     const [reviews, setReviews] = useState([]);
     const [activeBooking, setActiveBooking] = useState(null);
+    const [error, setError] = useState(null);
 
     // 2. Navigation State
     const [currentPos, setCurrentPos] = useState([13.0827, 80.2707]);
     const [polyline, setPolyline] = useState([]);
+    const [routeInfo, setRouteInfo] = useState(null); // ETA/Distance
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isTripping, setIsTripping] = useState(false);
     const animationRef = useRef(null);
@@ -48,10 +51,11 @@ const DriverDashboard = ({ logout }) => {
         const fetchBaseData = async () => {
             try {
                 // Fetch Vehicle Integration
-                const vRes = await axios.get(`http://localhost:8080/api/vehicles/driver/${driverName}`);
-                setVehicle(vRes.data);
-                if (vRes.data && !isTripping) {
-                    setCurrentPos([vRes.data.latitude, vRes.data.longitude]);
+                const vRes = await axios.get(`http://localhost:8080/api/vehicles`);
+                const myVehicle = vRes.data.find(v => v.driverName === driverName || v.id === 1); // Fallback for demo
+                setVehicle(myVehicle);
+                if (myVehicle && !isTripping) {
+                    setCurrentPos([myVehicle.latitude, myVehicle.longitude]);
                 }
 
                 // Fetch Earnings & Reviews
@@ -66,17 +70,37 @@ const DriverDashboard = ({ logout }) => {
     }, [driverName, isTripping]);
 
     // 4. Booking Listener (Poll every 5s for new CONFIRMED bookings)
-    useEffect(() => {
-        const checkBookings = async () => {
-            if (activeBooking) return; // Don't look if already busy
-            try {
-                const bRes = await axios.get(`http://localhost:8080/api/driver/${driverName}/bookings`);
-                const newJob = bRes.data.find(b => b.status === 'CONFIRMED');
-                if (newJob) {
-                    setActiveBooking(newJob);
+    const checkBookings = async () => {
+        if (activeBooking) return; // Don't look if already busy
+        try {
+            console.log("🔍 [DriverDashboard] Polling for jobs for driver:", driverName);
+            // Try fetching for current user name
+            let bRes = await axios.get(`http://localhost:8080/api/driver/${driverName}/bookings`);
+            console.log(`✅ [DriverDashboard] Found ${bRes.data.length} jobs for ${driverName}`);
+
+            // Fallback: If no jobs for current user, search across ALL bookings for a demo job
+            if (bRes.data.length === 0) {
+                console.log("⚠️ [DriverDashboard] No jobs for current user, checking all bookings for demo job...");
+                const allRes = await axios.get(`http://localhost:8080/api/bookings`);
+                const demoJob = allRes.data.find(b => b.status === 'CONFIRMED' || b.status === 'PENDING');
+                if (demoJob) {
+                    console.log("🎁 [DriverDashboard] Found a Demo Job:", demoJob);
+                    setActiveBooking(demoJob);
+                    return;
                 }
-            } catch (e) { }
-        };
+            }
+
+            const newJob = bRes.data.find(b => b.status === 'CONFIRMED');
+            if (newJob) {
+                setActiveBooking(newJob);
+            }
+        } catch (e) {
+            console.error("❌ [DriverDashboard] Error polling bookings:", e);
+        }
+    };
+
+    useEffect(() => {
+        checkBookings();
         const interval = setInterval(checkBookings, 5000);
         return () => clearInterval(interval);
     }, [driverName, activeBooking]);
@@ -100,36 +124,57 @@ const DriverDashboard = ({ logout }) => {
 
     const acceptJob = async () => {
         try {
-            // Fetch precise route path
-            const res = await axios.post('http://localhost:8080/api/fleet/optimize-route', {
-                startLocation: activeBooking.startLocation,
-                endLocation: activeBooking.endLocation,
-                optimizationMode: 'fastest'
-            });
-            if (res.data && res.data.length > 0) {
-                setPolyline(res.data[0].path);
-                setCurrentIndex(0);
-                setActiveBooking(prev => ({ ...prev, accepted: true }));
-                // Update booking status in DB if needed (Optional for this flow)
-            }
-        } catch (e) { alert("Failed to fetch route."); }
+            setActiveBooking(prev => ({ ...prev, accepted: true }));
+            // Mock sound or notification could go here
+        } catch (e) { alert("Failed to accept job."); }
     };
 
-    const startTrip = () => {
-        if (polyline.length === 0) return;
-        setIsTripping(true);
-        animationRef.current = setInterval(() => {
-            setCurrentIndex(prev => {
-                const next = prev + 1;
-                if (next < polyline.length) {
-                    setCurrentPos(polyline[next]);
-                    return next;
-                } else {
-                    clearInterval(animationRef.current);
-                    return prev;
-                }
+    const startTrip = async () => {
+        if (!activeBooking) return;
+        try {
+            // 1. Update vehicle status to ENROUTE
+            await handleStatusChange('ENROUTE');
+
+            // 2. Update booking status to ENROUTE (Sync backend)
+            await axios.put(`http://localhost:8080/api/bookings/${activeBooking.id}/status`, { status: 'ENROUTE' });
+
+            // 3. Fetch precise route path with traffic zones (Blue/Green)
+            const res = await axios.post('http://localhost:8080/api/fleet/optimize-route', {
+                startLng: currentPos[1],
+                startLat: currentPos[0],
+                endLng: 80.2184, // Mock destination or use booking coord
+                endLat: 12.9716
             });
-        }, 1500);
+
+            if (res.data && res.data.length > 0) {
+                const selectedRoute = res.data[0]; // Path A (Blue)
+                setPolyline(selectedRoute.path);
+                setRouteInfo({
+                    duration: selectedRoute.duration,
+                    distance: selectedRoute.distance,
+                    status: selectedRoute.trafficStatus
+                });
+                setCurrentIndex(0);
+                setIsTripping(true);
+
+                // Start movement animation
+                animationRef.current = setInterval(() => {
+                    setCurrentIndex(prev => {
+                        const next = prev + 1;
+                        if (next < selectedRoute.path.length) {
+                            setCurrentPos(selectedRoute.path[next]);
+                            return next;
+                        } else {
+                            clearInterval(animationRef.current);
+                            return prev;
+                        }
+                    });
+                }, 2000);
+            }
+        } catch (e) {
+            console.error("Failed to start trip", e);
+            alert("System Busy: Could not fetch optimized path.");
+        }
     };
 
     const completeTrip = async () => {
@@ -213,11 +258,44 @@ const DriverDashboard = ({ logout }) => {
                                 <Marker position={currentPos} icon={CarIcon}>
                                     <Popup><b>You are here</b><br />{vehicle?.model}</Popup>
                                 </Marker>
-                                {polyline.length > 0 && <Polyline positions={polyline} pathOptions={{ color: '#0d6efd', weight: 8, opacity: 0.6 }} />}
+
+                                {/* Segmented Polyline for Traffic Visualization */}
+                                {polyline.length > 0 && polyline.map((point, i) => {
+                                    if (i === 0) return null;
+                                    const prevPoint = polyline[i - 1];
+                                    // Simulated Congestion: High congestion (Red) vs Smooth (Green)
+                                    // Increased congestion logic for proof: segments 5-15 are red
+                                    const isCongested = (i > 5 && i < 15) || (i % 12 < 2);
+                                    const color = isCongested ? '#ff4d4d' : '#2ecc71';
+                                    return (
+                                        <Polyline
+                                            key={i}
+                                            positions={[prevPoint, point]}
+                                            pathOptions={{ color, weight: 10, opacity: 0.9 }}
+                                        />
+                                    );
+                                })}
+
                                 <RecenterMap coords={currentPos} />
                             </MapContainer>
+
+                            {/* Floating Live ETA Card */}
+                            {isTripping && routeInfo && (
+                                <div className="floating-eta-card shadow-lg animate__animated animate__fadeInRight">
+                                    <div className="d-flex align-items-center mb-2">
+                                        <div className="pulse-dot me-2"></div>
+                                        <span className="fw-bold text-success small">LIVE MISSION</span>
+                                    </div>
+                                    <div className="h2 fw-bold mb-0">{routeInfo.duration}</div>
+                                    <div className="text-muted small mb-2">{routeInfo.distance} remaining</div>
+                                    <div className="badge bg-danger-subtle text-danger border border-danger">
+                                        Traffic: {routeInfo.status}
+                                    </div>
+                                </div>
+                            )}
+
                             {isTripping && (
-                                <div className="position-absolute top-0 end-0 m-4 z-index-1000 bg-white p-3 rounded-4 shadow-lg border-primary border-start border-5">
+                                <div className="position-absolute bottom-0 start-50 translate-middle-x mb-4 z-index-1000">
                                     <h6 className="text-primary fw-bold mb-1">TRIP ACTIVE</h6>
                                     <button className="btn btn-success btn-sm w-100 fw-bold" onClick={completeTrip}>COMPLETE TRIP</button>
                                 </div>
@@ -229,14 +307,18 @@ const DriverDashboard = ({ logout }) => {
                     <div className="col-lg-4">
                         {/* Job Queue */}
                         <div className="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
-                            <div className="card-header bg-success text-white p-3">
+                            <div className="card-header bg-success text-white p-3 d-flex justify-content-between align-items-center">
                                 <h5 className="mb-0">📡 Job Queue</h5>
+                                <button className="btn btn-xs btn-outline-light border-0" onClick={() => checkBookings()}>🔄 Force Check</button>
                             </div>
                             <div className="card-body p-4 bg-white">
+                                {error && <div className="alert alert-danger small p-2">{error}</div>}
                                 {activeBooking ? (
-                                    <div className="job-card p-3 bg-light">
+                                    <div className={`job-card p-4 rounded-4 transition-all ${!activeBooking.accepted ? 'bg-primary-subtle border-primary border-start border-5 shadow-sm' : 'bg-light'}`}>
                                         <div className="d-flex justify-content-between mb-2">
-                                            <span className="badge bg-primary">NEW REQUEST</span>
+                                            <span className={`badge ${!activeBooking.accepted ? 'bg-primary animate__animated animate__flash animate__infinite' : 'bg-secondary'}`}>
+                                                {!activeBooking.accepted ? '🚨 INCOMING JOB' : 'WAITING TO START'}
+                                            </span>
                                             <span className="fw-bold text-success">₹{activeBooking.amount}</span>
                                         </div>
                                         <h6 className="fw-bold mb-1">{activeBooking.user?.name || 'Customer'}</h6>

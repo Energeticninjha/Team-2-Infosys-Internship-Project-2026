@@ -28,7 +28,8 @@ const Register = ({ updateToken, setRole }) => {
                 const normalizedRole = data.role.toLowerCase();
 
                 localStorage.setItem('role', normalizedRole);
-                localStorage.setItem('userId', data.id); // Fix: Store actual userId for Trip History
+                localStorage.setItem('userId', data.id);
+                localStorage.setItem('name', formData.name || '');
                 setRole(normalizedRole);
 
                 updateToken(data.token);

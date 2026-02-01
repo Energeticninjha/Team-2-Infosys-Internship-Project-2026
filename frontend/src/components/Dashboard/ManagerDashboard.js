@@ -11,6 +11,9 @@ const ManagerDashboard = ({ logout }) => {
         onTimeDelivery: 94.2
     });
     const [trips, setTrips] = useState([]);
+    const [pendingBookings, setPendingBookings] = useState([]);
+    const [recommendedDrivers, setRecommendedDrivers] = useState([]);
+    const [selectedBookingId, setSelectedBookingId] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -26,14 +29,27 @@ const ManagerDashboard = ({ logout }) => {
                 setFleetStats(prev => ({ ...prev, activeVehicles: activeCount, driversOnline: onlineDrivers }));
 
                 // Fetch bookings for active trips
-                const bRes = await axios.get('http://localhost:8080/api/bookings'); // Need to ensure this exists or mock
+                const bRes = await axios.get('http://localhost:8080/api/bookings');
                 setTrips(bRes.data.filter(b => b.status === 'ENROUTE' || b.status === 'PICKED_UP'));
+                setPendingBookings(bRes.data.filter(b => b.status === 'PENDING' || !b.vehicle));
             } catch (error) {
                 console.error("Error fetching manager dashboard data", error);
             }
         };
         fetchManagerData();
+        const interval = setInterval(fetchManagerData, 5000);
+        return () => clearInterval(interval);
     }, []);
+
+    const fetchRecommendations = async (bookingId) => {
+        setSelectedBookingId(bookingId);
+        try {
+            const res = await axios.get(`http://localhost:8080/api/fleet/recommend-driver/${bookingId}`);
+            setRecommendedDrivers(res.data);
+        } catch (error) {
+            console.error("Error fetching recommendations", error);
+        }
+    };
 
     return (
         <div className="container-fluid p-0 min-vh-100 bg-light">
@@ -149,10 +165,77 @@ const ManagerDashboard = ({ logout }) => {
                     )}
 
                     {activeView === 'assignments' && (
-                        <div className="card shadow-sm border-0 rounded-4 p-5 text-center animate__animated animate__fadeIn">
-                            <div className="display-1 text-warning mb-3">📝</div>
-                            <h3>Job Assignments Module</h3>
-                            <p className="text-muted">Dispatch system for manual vehicle assignment is coming soon.</p>
+                        <div className="animate__animated animate__fadeIn">
+                            <div className="row g-4">
+                                <div className="col-md-5">
+                                    <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
+                                        <div className="card-header bg-warning py-3">
+                                            <h5 className="mb-0 fw-bold">🕒 Pending Bookings</h5>
+                                        </div>
+                                        <div className="list-group list-group-flush">
+                                            {pendingBookings.length > 0 ? pendingBookings.map(b => (
+                                                <button
+                                                    key={b.id}
+                                                    className={`list-group-item list-group-item-action p-3 border-0 border-bottom ${selectedBookingId === b.id ? 'bg-warning-subtle' : ''}`}
+                                                    onClick={() => fetchRecommendations(b.id)}
+                                                >
+                                                    <div className="d-flex justify-content-between mb-1">
+                                                        <span className="fw-bold">BK-{b.id}</span>
+                                                        <span className="badge bg-secondary">Pending</span>
+                                                    </div>
+                                                    <small className="text-muted d-block">{b.startLocation} ➝ {b.endLocation}</small>
+                                                </button>
+                                            )) : (
+                                                <div className="p-4 text-center text-muted">No pending bookings.</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="col-md-7">
+                                    <div className="card shadow-sm border-0 rounded-4 overflow-hidden">
+                                        <div className="card-header bg-dark text-white py-3">
+                                            <h5 className="mb-0 fw-bold">🤖 Smart Driver Recommendations</h5>
+                                        </div>
+                                        <div className="card-body p-0">
+                                            {selectedBookingId ? (
+                                                <div className="table-responsive">
+                                                    <table className="table table-hover align-middle mb-0">
+                                                        <thead className="table-light">
+                                                            <tr>
+                                                                <th className="px-4">Driver</th>
+                                                                <th>Rating</th>
+                                                                <th>Action</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {recommendedDrivers.map((driver, index) => (
+                                                                <tr key={driver.id}>
+                                                                    <td className="px-4">
+                                                                        <div className="fw-bold">{driver.driverName}</div>
+                                                                        <small className="text-muted">{driver.model}</small>
+                                                                        {index === 0 && (
+                                                                            <span className="ms-2 badge bg-success animate__animated animate__pulse animate__infinite">Recommended</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td>⭐ {driver.driverRating}</td>
+                                                                    <td>
+                                                                        <button className="btn btn-sm btn-primary fw-bold px-3">Assign</button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            ) : (
+                                                <div className="p-5 text-center text-muted">
+                                                    <div className="display-4 mb-3">🚗</div>
+                                                    <h6>Select a pending booking to see ranked drivers by proximity.</h6>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
 
