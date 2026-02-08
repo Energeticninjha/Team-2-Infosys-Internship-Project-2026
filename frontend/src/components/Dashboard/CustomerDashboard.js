@@ -3,10 +3,21 @@ import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import axios from 'axios';
+import { MapPin, Navigation, Clock, Star, Battery, Calendar, CreditCard, ChevronRight, X, User } from 'lucide-react';
 
+// Layout & Design System
+import MainLayout from '../Layout/MainLayout';
+import Card from '../Common/Card';
+import Button from '../Common/Button';
+import '../../styles/dashboard.css'; // Keep for some map transitions if needed
+
+// Assets
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+import DriverDetailsModal from './DriverDetailsModal';
+import ProfileSection from './ProfileSection';
 
+// --- Leaflet Icons ---
 let DefaultIcon = L.icon({
     iconUrl: icon,
     shadowUrl: iconShadow,
@@ -22,6 +33,7 @@ const CarIcon = new L.Icon({
     className: 'vehicle-marker-transition'
 });
 
+// --- Helper Components ---
 function ChangeView({ center }) {
     const map = useMap();
     useEffect(() => {
@@ -29,6 +41,9 @@ function ChangeView({ center }) {
     }, [center, map]);
     return null;
 }
+const DirectionsRenderer = ({ positions, color, weight, opacity }) => {
+    return <Polyline positions={positions} pathOptions={{ color, weight, opacity }} />;
+};
 
 const CustomerDashboard = ({ logout }) => {
     // Basic Search State
@@ -47,57 +62,78 @@ const CustomerDashboard = ({ logout }) => {
     // Live Tracking
     const [liveVehicles, setLiveVehicles] = useState([]);
     const [activeBooking, setActiveBooking] = useState(() => {
-        const saved = localStorage.getItem('activeBooking');
+        const saved = sessionStorage.getItem('activeBooking');
         const parsed = saved ? JSON.parse(saved) : null;
-        // Fix: Do not load 'SCHEDULED' bookings as active, to prevent blocking the UI
         if (parsed && parsed.status === 'SCHEDULED') return null;
         return parsed;
     });
 
     // Persistent Route Path & Index
     const [persistentRoute, setPersistentRoute] = useState(() => {
-        const saved = localStorage.getItem('persistentRoute');
+        const saved = sessionStorage.getItem('persistentRoute');
         return saved ? JSON.parse(saved) : null;
     });
     const [currentIndex, setCurrentIndex] = useState(() => {
-        return parseInt(localStorage.getItem('currentIndex') || '0');
+        return parseInt(sessionStorage.getItem('currentIndex') || '0');
     });
 
     // UX State
     const [showReviewModal, setShowReviewModal] = useState(false);
-    const [viewMode, setViewMode] = useState('book');
+    const [activeView, setActiveView] = useState('book'); // 'book', 'trips', 'profile'
     const [myTrips, setMyTrips] = useState([]);
     const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const [recommendations, setRecommendations] = useState([]);
     const [filters, setFilters] = useState({ type: 'All', seats: 'All', engine: 'All' });
     const [showBookingModal, setShowBookingModal] = useState(false);
-    const [bookingTime, setBookingTime] = useState('');
+    const [bookingDate, setBookingDate] = useState(() => new Date().toISOString().split('T')[0]);
+    const [bookingTime, setBookingTime] = useState(() => new Date().toTimeString().slice(0, 5));
     const [selectedDuration, setSelectedDuration] = useState(1);
 
-    // 1. Path Following Simulation Layer (Wait for Schedule)
+    // Suggestion Data
+    const [travelSuggestions, setTravelSuggestions] = useState([]);
+    const [tripsResults, setTripsResults] = useState([]);
+    const [selectedTripResult, setSelectedTripResult] = useState(null);
+
+    // URL Param Check (for sidebar navigation)
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('view') === 'trips') {
+            loadMyTrips();
+        } else {
+            setActiveView('book');
+        }
+    }, [window.location.search]);
+
+    useEffect(() => {
+        // Fetch suggestions for dropdown
+        const fetchSuggestions = async () => {
+            try {
+                const res = await axios.get('http://localhost:8083/api/trips/recommendations');
+                setTravelSuggestions(res.data || []);
+            } catch (e) { console.warn("Failed to fetch suggestions"); }
+        };
+        fetchSuggestions();
+    }, []);
+
+    // 1. Path Following Simulation Layer
     useEffect(() => {
         if (activeBooking && persistentRoute && currentIndex < persistentRoute.path.length) {
             const timer = setInterval(() => {
-                // Check if it's time to move
                 if (activeBooking.scheduledStartTime) {
                     const sched = new Date(activeBooking.scheduledStartTime);
-                    if (sched > new Date()) {
-                        console.log("🕒 Scheduled ride: Waiting for pickup time...");
-                        return;
-                    }
+                    if (sched > new Date()) return;
                 }
 
                 const nextIndex = currentIndex + 1;
                 if (nextIndex < persistentRoute.path.length) {
                     setCurrentIndex(nextIndex);
-                    localStorage.setItem('currentIndex', nextIndex.toString());
+                    sessionStorage.setItem('currentIndex', nextIndex.toString());
                 } else {
-                    // Finished
                     setShowReviewModal(true);
                     clearInterval(timer);
                 }
-            }, 2000); // Move every 2 seconds
+            }, 2000);
             return () => clearInterval(timer);
         }
     }, [activeBooking, persistentRoute, currentIndex]);
@@ -112,12 +148,12 @@ const CustomerDashboard = ({ logout }) => {
         }
     }, [activeBooking, showReviewModal]);
 
-    // 3. Polling for other vehicles (Only when NOT in active ride)
+    // 3. Polling for other vehicles
     useEffect(() => {
         const fetchLiveVehicles = async () => {
-            if (activeBooking) return; // Hide distraction
+            if (activeBooking) return;
             try {
-                const response = await fetch('http://localhost:8080/api/vehicles/live');
+                const response = await fetch('http://localhost:8083/api/vehicles/live');
                 const data = await response.json();
                 setLiveVehicles(data);
             } catch (error) { }
@@ -127,7 +163,7 @@ const CustomerDashboard = ({ logout }) => {
         return () => clearInterval(interval);
     }, [activeBooking]);
 
-    // Restore state from storage
+    // Restore state
     useEffect(() => {
         if (activeBooking && persistentRoute) {
             setPickupCoords(persistentRoute.pickup);
@@ -136,9 +172,11 @@ const CustomerDashboard = ({ logout }) => {
         }
     }, []);
 
+
+
     const geocode = async (query) => {
         try {
-            const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`);
+            const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&countrycodes=in`);
             if (res.data && res.data.length > 0) {
                 return {
                     lat: parseFloat(res.data[0].lat),
@@ -149,14 +187,6 @@ const CustomerDashboard = ({ logout }) => {
             return null;
         } catch (e) { return null; }
     };
-
-    // 3. Initialize Booking Time for Today
-    useEffect(() => {
-        const now = new Date();
-        const offset = now.getTimezoneOffset() * 60000;
-        const localISOTime = new Date(now - offset).toISOString().slice(0, 16);
-        setBookingTime(localISOTime);
-    }, []);
 
     const handleSearch = async (e) => {
         e.preventDefault();
@@ -170,31 +200,72 @@ const CustomerDashboard = ({ logout }) => {
             setDropCoords([dLoc.lat, dLoc.lon]);
             setMapCenter([pLoc.lat, pLoc.lon]);
 
-            const response = await fetch('http://localhost:8080/api/fleet/optimize-route', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    startLocation: pickup, endLocation: drop,
-                    startLat: pLoc.lat, startLng: pLoc.lon,
-                    endLat: dLoc.lat, endLng: dLoc.lon,
-                    optimizationMode: 'fastest'
-                })
-            });
-            const data = await response.json();
-            setRoutes(data);
-            setLoading(false);
-
-            // Fetch AI Recommendations (Decoupled)
+            // 1. Fetch Visual Route
             try {
-                const uid = localStorage.getItem('userId') || 1;
-                const recRes = await axios.get(`http://localhost:8080/api/recommendations/${uid}`);
+                const response = await fetch('http://localhost:8083/api/fleet/optimize-route', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        startLocation: pickup, endLocation: drop,
+                        startLat: pLoc.lat, startLng: pLoc.lon,
+                        endLat: dLoc.lat, endLng: dLoc.lon,
+                        optimizationMode: 'fastest'
+                    })
+                });
+                const data = await response.json();
+
+                // Enhance Data for Visualization (Blue vs Green)
+                let enhancedRoutes = [];
+                if (data && data.length > 0) {
+                    // 1. Optimal Route (Green)
+                    enhancedRoutes.push({ ...data[0], type: 'optimal', color: '#2ecc71', id: 'opt-1' });
+
+                    // 2. Simulated Alternative Route (Blue) if not present
+                    if (data.length === 1) {
+                        const altPath = data[0].path.map(p => [p[0] + 0.001, p[1] - 0.001]); // Slight offset
+                        enhancedRoutes.push({
+                            id: 'alt-1',
+                            path: altPath,
+                            duration: parseInt(data[0].duration.split(' ')[0]) + 5 + " mins",
+                            distance: (parseFloat(data[0].distance.split(' ')[0]) + 1.2).toFixed(1) + " km",
+                            type: 'possible',
+                            color: '#0d6efd' // Blue
+                        });
+                    } else {
+                        // If API returned more, color them blue
+                        data.slice(1).forEach((r, idx) => {
+                            enhancedRoutes.push({ ...r, type: 'possible', color: '#0d6efd', id: `alt-${idx}` });
+                        });
+                    }
+                }
+                setRoutes(enhancedRoutes);
+                if (enhancedRoutes.length > 0) setSelectedRouteId(enhancedRoutes[0].id);
+
+            } catch (err) { console.warn("Route fetch failed"); }
+
+            // 2. Fetch Trips
+            const searchDate = bookingDate;
+            const tripRes = await axios.get('http://localhost:8083/api/trips/search', {
+                params: { from: pickup, to: drop, date: searchDate }
+            });
+            // Sort: Online drivers first
+            const sortedResults = (tripRes.data || []).sort((a, b) => {
+                const aOnline = a.driver?.isOnline ? 1 : 0;
+                const bOnline = b.driver?.isOnline ? 1 : 0;
+                return bOnline - aOnline;
+            });
+            setTripsResults(sortedResults);
+
+            // Recommendations
+            try {
+                const uid = sessionStorage.getItem('userId') || 1;
+                const recRes = await axios.get(`http://localhost:8083/api/recommendations/${uid}`);
                 setRecommendations(recRes.data);
-            } catch (recError) {
-                console.warn("Recommendations fetch failed:", recError);
-            }
+            } catch (e) { }
+
         } catch (error) {
-            console.error("Route Error:", error);
-            alert("Error calculating route. Please check the backend connection.");
+            console.error("Search Error:", error);
+            alert("Error searching for rides.");
         } finally {
             setLoading(false);
         }
@@ -207,112 +278,71 @@ const CustomerDashboard = ({ logout }) => {
 
     const confirmBooking = async () => {
         if (!selectedRouteId || !selectedVehicle) { alert("Select route and vehicle."); return; }
-
         const routeObj = routes.find(r => r.id === selectedRouteId);
-
         try {
             const payload = {
-                userId: localStorage.getItem('userId') || 1,
-                vehicleId: selectedVehicle.id,
+                userId: sessionStorage.getItem('userId') || 1,
+                vehicleId: selectedVehicle.id || (selectedTripResult?.vehicle?.id), // Handle both cases
+                driverId: selectedTripResult?.driver?.id, // Ensure driver info is passed if selected from trips list
                 startLocation: pickup,
+                startLat: pickupCoords ? pickupCoords[0] : null,
+                startLng: pickupCoords ? pickupCoords[1] : null,
                 endLocation: drop,
+                endLat: dropCoords ? dropCoords[0] : null,
+                endLng: dropCoords ? dropCoords[1] : null,
                 price: (150 + (selectedVehicle.id || 0) * 10) + (selectedDuration * 125),
                 estimatedTime: routeObj?.duration || "20 mins",
                 routeId: selectedRouteId,
-                scheduledStartTime: bookingTime ? new Date(bookingTime).toISOString() : new Date().toISOString(),
+                scheduledStartTime: new Date(`${bookingDate}T${bookingTime}`).toISOString(),
                 durationHours: selectedDuration
             };
-
-            const response = await fetch('http://localhost:8080/api/bookings', {
+            const response = await fetch('http://localhost:8083/api/bookings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
             if (response.ok) {
-                const bookingData = await response.json();
-
-                // If Scheduled, don't block the UI. Just show trips.
-                if (bookingData.status === 'SCHEDULED') {
-                    alert("✅ Ride Scheduled Successfully! You can view it in 'My Trips'. Tracking will start at the scheduled time.");
-                    setRoutes([]);
-                    setShowBookingModal(false);
-                    loadMyTrips(); // Refresh trips
-                    setViewMode('trips');
-                    return;
-                }
-
-                setActiveBooking(bookingData);
-
-                const routeData = {
-                    path: routeObj.path,
-                    pickup: pickupCoords,
-                    drop: dropCoords
-                };
-                setPersistentRoute(routeData);
-                setCurrentIndex(0);
-                setElapsedSeconds(0);
-
-                localStorage.setItem('activeBooking', JSON.stringify(bookingData));
-                localStorage.setItem('persistentRoute', JSON.stringify(routeData));
-                localStorage.setItem('currentIndex', '0');
-
+                // User Requirement: "take to the my tips page... status need to show 'pending'"
+                alert("Booking Requested! Details sent to driver.");
                 setRoutes([]);
                 setShowBookingModal(false);
+                setSelectedTripResult(null);
+                loadMyTrips(); // Refresh trips list
+                setActiveView('trips'); // Go to My Trips
+                setPickup(''); setDrop(''); // Clear search
             }
-        } catch (error) { }
+        } catch (error) {
+            alert("Booking Failed");
+        }
     };
 
     const submitReview = async () => {
         try {
-            console.log("Submitting review for booking:", activeBooking.id);
-            const response = await fetch(`http://localhost:8080/api/bookings/${activeBooking.id}/review`, {
+            await fetch(`http://localhost:8083/api/bookings/${activeBooking.id}/review`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    rating: reviewForm.rating,
-                    comment: reviewForm.comment
-                })
+                body: JSON.stringify({ rating: reviewForm.rating, comment: reviewForm.comment })
             });
-
-            if (!response.ok) {
-                const errorData = await response.text();
-                console.error("Submission failed:", errorData);
-                throw new Error(errorData || "Server responded with error");
-            }
-
-            localStorage.removeItem('activeBooking');
-            localStorage.removeItem('persistentRoute');
-            localStorage.removeItem('currentIndex');
+            sessionStorage.removeItem('activeBooking');
+            sessionStorage.removeItem('persistentRoute');
+            sessionStorage.removeItem('currentIndex');
             setActiveBooking(null);
             setPersistentRoute(null);
             setShowReviewModal(false);
-            setCurrentIndex(0);
-            setElapsedSeconds(0);
             setPickup(''); setDrop('');
             alert("Thanks for your review!");
-        } catch (e) {
-            console.error("Review Error:", e);
-            alert("Failed to submit review: " + e.message);
-        }
+        } catch (e) { console.error(e); }
     };
 
     const loadMyTrips = async () => {
         try {
-            const uid = localStorage.getItem('userId');
-            console.log("🔍 Fetching History for User ID:", uid);
-            if (!uid) {
-                console.warn("⚠️ No User ID found in localStorage. History might be empty.");
-                setMyTrips([]);
-                setViewMode('trips');
-                return;
-            }
-            const res = await axios.get(`http://localhost:8080/api/bookings/user/${uid}`);
-            console.log("✅ Received Trips:", res.data.length);
+            const uid = sessionStorage.getItem('userId');
+            if (!uid) return;
+            const res = await axios.get(`http://localhost:8083/api/bookings/user/${uid}`);
             setMyTrips(res.data.sort((a, b) => b.id - a.id));
-            setViewMode('trips');
+            setActiveView('trips');
         } catch (e) {
-            console.error("Trip History Fetch Error:", e);
             alert("Failed to load trips.");
         }
     };
@@ -323,276 +353,48 @@ const CustomerDashboard = ({ logout }) => {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // Helper to format MySQL timestamp to 'Oct 24, 10:30 AM'
     const formatHistoryDate = (dateStr) => {
         if (!dateStr) return 'N/A';
-        const date = new Date(dateStr);
-        return date.toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
+        return new Date(dateStr).toLocaleString('en-US', {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
         });
     };
 
+    // --- Render ---
+
     return (
-        <div className="container-fluid p-0 min-vh-100 d-flex flex-column bg-white">
-            <nav className="navbar navbar-dark bg-primary shadow-sm">
-                <div className="container-fluid">
-                    <span className="navbar-brand fw-bold">🚗 NeuroFleetX</span>
-                    <div>
-                        <button className="btn btn-sm btn-light me-2 fw-bold" onClick={() => setViewMode('book')}>Book Ride</button>
-                        <button className="btn btn-sm btn-outline-light me-3 fw-bold" onClick={loadMyTrips}>My Trips</button>
-                        <button className="btn btn-danger btn-sm fw-bold" onClick={logout}>Logout</button>
-                    </div>
-                </div>
-            </nav>
+        <MainLayout title="Customer Dashboard" role="customer" activeView={activeView} onViewChange={setActiveView} logout={logout}>
+            {/* Split View Container */}
+            <div className="position-relative w-100 h-100">
 
-            <div className="row flex-grow-1 g-0">
-                <div className="col-md-4 p-4 shadow-lg bg-light" style={{ zIndex: 1000, overflowY: 'auto', maxHeight: '92vh' }}>
-
-                    {viewMode === 'book' && (
-                        <>
-                            {!activeBooking && (
-                                <>
-                                    <h4 className="mb-4 text-primary">Where to?</h4>
-                                    <form onSubmit={handleSearch}>
-                                        <div className="mb-3 input-group overflow-hidden rounded-3 shadow-sm">
-                                            <span className="input-group-text bg-white border-end-0">📍</span>
-                                            <input type="text" className="form-control border-start-0" placeholder="Pickup Location" value={pickup} onChange={(e) => setPickup(e.target.value)} required />
-                                        </div>
-                                        <div className="mb-4 input-group overflow-hidden rounded-3 shadow-sm">
-                                            <span className="input-group-text bg-white border-end-0">🏁</span>
-                                            <input type="text" className="form-control border-start-0" placeholder="Destination" value={drop} onChange={(e) => setDrop(e.target.value)} required />
-                                        </div>
-                                        <button type="submit" className="btn btn-primary w-100 py-3 fw-bold rounded-3 shadow" disabled={loading}>
-                                            {loading ? <span className="spinner-border spinner-border-sm me-2"></span> : 'Find Best Routes'}
-                                        </button>
-                                    </form>
-
-                                    {routes.length > 0 && (
-                                        <div className="mt-4">
-                                            <div className="row g-3 mb-4">
-                                                {routes.map(r => (
-                                                    <div key={r.id} className="col-6">
-                                                        <div
-                                                            className={`card h-100 border-0 shadow-sm rounded-4 cursor-pointer selection-card ${selectedRouteId === r.id ? 'active' : ''}`}
-                                                            onClick={() => setSelectedRouteId(r.id)}
-                                                            style={{ cursor: 'pointer', transition: '0.3s' }}
-                                                        >
-                                                            <div className={`card-header border-0 py-2 rounded-top-4 ${r.mode.includes('Blue') ? 'bg-primary' : 'bg-success'} text-white`}>
-                                                                <small className="fw-bold">{r.mode}</small>
-                                                            </div>
-                                                            <div className="card-body p-3">
-                                                                <h5 className="fw-bold mb-0">{r.duration}</h5>
-                                                                <small className="text-muted">{r.distance}</small>
-                                                                <div className="mt-2">
-                                                                    <span className="badge bg-light text-dark border">{r.trafficStatus}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-
-                                            <div className="d-flex justify-content-between align-items-center mb-3">
-                                                <h6 className="text-muted fw-bold mb-0 small text-uppercase">Recommended For You</h6>
-                                                <div className="dropdown">
-                                                    <button className="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                                        Filters
-                                                    </button>
-                                                    <ul className="dropdown-menu p-3 shadow border-0 rounded-4" style={{ minWidth: '200px' }}>
-                                                        <li className="mb-2">
-                                                            <label className="small fw-bold">Type</label>
-                                                            <select className="form-select form-select-sm" value={filters.type} onChange={e => setFilters({ ...filters, type: e.target.value })}>
-                                                                <option>All</option><option>Sedan</option><option>SUV</option><option>Luxury</option>
-                                                            </select>
-                                                        </li>
-                                                        <li className="mb-2">
-                                                            <label className="small fw-bold">Seats</label>
-                                                            <select className="form-select form-select-sm" value={filters.seats} onChange={e => setFilters({ ...filters, seats: e.target.value })}>
-                                                                <option>All</option><option>4</option><option>6</option><option>7</option>
-                                                            </select>
-                                                        </li>
-                                                        <li>
-                                                            <div className="form-check form-switch mt-2">
-                                                                <input className="form-check-input" type="checkbox" checked={filters.engine === 'EV'} onChange={e => setFilters({ ...filters, engine: e.target.checked ? 'EV' : 'All' })} />
-                                                                <label className="form-check-label small fw-bold">EV Only</label>
-                                                            </div>
-                                                        </li>
-                                                    </ul>
-                                                </div>
-                                            </div>
-
-                                            <div className="list-group mb-3">
-                                                {recommendations
-                                                    .filter(v => (filters.type === 'All' || v.type === filters.type) &&
-                                                        (filters.seats === 'All' || String(v.seats) === filters.seats) &&
-                                                        (filters.engine === 'All' || (filters.engine === 'EV' && v.ev)))
-                                                    .map(v => (
-                                                        <button key={v.id} className={`list-group-item list-group-item-action border-0 mb-3 rounded-4 shadow-sm p-3 position-relative overflow-hidden transition-all ${selectedVehicle?.id === v.id ? 'border-start border-4 border-primary bg-primary-subtle' : ''}`} onClick={() => openBookingModal(v)}>
-                                                            {v.aiRecommended && (
-                                                                <div className="position-absolute py-1 px-3 bg-primary text-white small fw-bold rounded-start-pill animate-glamor" style={{ top: '10px', right: '-5px', zIndex: 1, boxShadow: '0 0 15px rgba(13, 110, 253, 0.5)' }}>
-                                                                    ✨ AI Recommended
-                                                                </div>
-                                                            )}
-                                                            <div className="d-flex justify-content-between align-items-start">
-                                                                <div className="flex-grow-1">
-                                                                    <div className="d-flex align-items-center mb-1">
-                                                                        <h6 className="mb-0 fw-bold">{v.model || 'Standard Sedan'}</h6>
-                                                                        {v.ev && <span className="ms-2 badge bg-success-subtle text-success border border-success-subtle">EV</span>}
-                                                                        <span className="ms-2 badge bg-secondary-subtle text-secondary small">{v.status}</span>
-                                                                    </div>
-                                                                    <small className="text-secondary d-block mb-2">{v.numberPlate} • {v.type || 'Sedan'} • {v.seats || 4} Seats</small>
-                                                                    <div className="d-flex align-items-center gap-3">
-                                                                        <span className="small text-muted">👤 {v.driverName || 'Verified Driver'}</span>
-                                                                        <span className="small text-warning fw-bold">⭐ {Math.max(4.0, v.driverRating || 4.8).toFixed(1)}</span>
-                                                                        <span className="small text-info ml-2">🔋 {v.batteryPercent || v.fuelPercent || 80}%</span>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="text-end">
-                                                                    <h5 className="fw-bold mb-0 text-primary">₹{150 + v.id * 10}</h5>
-                                                                    <small className="text-muted">flat rate</small>
-                                                                </div>
-                                                            </div>
-                                                        </button>
-                                                    ))}
-                                            </div>
-
-                                            {(!recommendations || recommendations.length === 0) && (
-                                                <div className="text-center py-4 bg-white rounded-4 shadow-sm border mb-4">
-                                                    <div className="display-6 mb-2">🔎</div>
-                                                    <p className="text-muted small px-3">Enter your destination to see smart vehicle recommendations tailored for you.</p>
-                                                </div>
-                                            )}
-
-                                            <button className="btn btn-outline-primary w-100 py-2 fw-bold rounded-3 mb-4" disabled={!selectedRouteId || !selectedVehicle} onClick={() => setShowBookingModal(true)}>
-                                                CONFIGURE & BOOK
-                                            </button>
-                                        </div>
-                                    )}
-                                </>
-                            )}
-
-                            {activeBooking && (
-                                <div className="text-center animate__animated animate__fadeIn">
-                                    <div className="mb-4">
-                                        <div className="spinner-grow text-primary mb-3" style={{ width: '3rem', height: '3rem' }}></div>
-                                        <h4 className="fw-bold">Ride in Progress</h4>
-
-                                        <div className="row g-2 mt-4">
-                                            <div className="col-6">
-                                                <div className="card border-0 bg-white shadow-sm p-3">
-                                                    <small className="text-muted fw-bold d-block mb-1">EXPECTED</small>
-                                                    <h4 className="fw-bold text-dark mb-0">{activeBooking.estimatedDuration || '20m'}</h4>
-                                                </div>
-                                            </div>
-                                            <div className="col-6">
-                                                <div className="card border-0 bg-primary text-white shadow-sm p-3">
-                                                    <small className="text-white-50 fw-bold d-block mb-1">LIVE DURATION</small>
-                                                    <h4 className="fw-bold mb-0">{formatTime(elapsedSeconds)}</h4>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
-                                        <div className="bg-primary p-3 text-white">
-                                            <h6 className="mb-0">Driver: {activeBooking.vehicle.driverName}</h6>
-                                        </div>
-                                        <div className="card-body text-start">
-                                            <p className="mb-1"><strong>Phone:</strong> {activeBooking.vehicle.driverContact}</p>
-                                            <p className="mb-0"><strong>Vehicle:</strong> {activeBooking.vehicle.model}</p>
-                                        </div>
-                                    </div>
-                                    <div className="alert alert-info border-0 rounded-3 shadow-sm p-3">
-                                        <small className="fw-bold">Your car is following the blue path precisely. Please wait until arrival.</small>
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {viewMode === 'trips' && (
-                        <div>
-                            <h4 className="mb-4 text-primary">Trip History</h4>
-                            {myTrips.length === 0 ? (
-                                <div className="text-center mt-5 text-muted">No trips yet.</div>
-                            ) : (
-                                <div className="list-group list-group-flush">
-                                    {myTrips.map(trip => (
-                                        <div key={trip.id} className="list-group-item border-0 mb-3 p-3 rounded-4 shadow-sm bg-white">
-                                            <div className="d-flex justify-content-between mb-2">
-                                                <span className="badge bg-light text-dark border">ID: {trip.id}</span>
-                                                <span className="badge bg-success">{trip.status}</span>
-                                            </div>
-                                            <div className="small fw-bold">{trip.startLocation} ➝ {trip.endLocation}</div>
-                                            <div className="d-flex justify-content-between mt-2">
-                                                <small className="text-muted">⏱️ Est: {trip.estimatedDuration || '20m'}</small>
-                                                <small className="text-muted">🚗 {trip.vehicle?.model || 'Fleet'}</small>
-                                            </div>
-                                            <div className="d-flex justify-content-between mt-2 pt-2 border-top align-items-center">
-                                                <div>
-                                                    {trip.status === 'SCHEDULED' ? (
-                                                        <small className="text-primary fw-bold d-block">🗓️ Scheduled: {formatHistoryDate(trip.scheduledStartTime)}</small>
-                                                    ) : (
-                                                        <small className="text-muted fw-bold d-block">{formatHistoryDate(trip.startTime)}</small>
-                                                    )}
-                                                </div>
-                                                <span className="fw-bold text-primary">₹{trip.amount}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                <div className="col-md-8 position-relative">
+                {/* --- Map Layer (Always Present) --- */}
+                <div className="position-absolute w-100 h-100" style={{ top: 0, left: 0, zIndex: 0 }}>
                     <MapContainer center={mapCenter} zoom={13} style={{ height: "100%", width: "100%" }} zoomControl={false}>
                         <ChangeView center={mapCenter} />
                         <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
+                        {/* Current Ride Path */}
                         {persistentRoute && (
                             <>
-                                {/* Segmented Polyline for Active Ride */}
-                                {persistentRoute.path.map((point, i) => {
-                                    if (i === 0) return null;
-                                    const prevPoint = persistentRoute.path[i - 1];
-                                    // Simulated Traffic zones: red for slow, green for fast
-                                    const color = i % 10 < 3 ? '#ff4d4d' : '#2ecc71';
-                                    return (
-                                        <Polyline
-                                            key={i}
-                                            positions={[prevPoint, point]}
-                                            pathOptions={{ color, weight: 8, opacity: 0.9 }}
-                                        />
-                                    );
-                                })}
+                                <Polyline positions={persistentRoute.path} pathOptions={{ color: '#0d6efd', weight: 6, opacity: 0.8 }} />
                                 <Marker position={persistentRoute.pickup}><Popup>Pickup</Popup></Marker>
                                 <Marker position={persistentRoute.drop}><Popup>Destination</Popup></Marker>
-
-                                {/* Deterministic Path-Following Marker */}
-                                <Marker position={persistentRoute.path[currentIndex]} icon={CarIcon}>
-                                    <Popup><b>Your Ride</b><br />{activeBooking?.vehicle.model}</Popup>
-                                </Marker>
+                                <Marker position={persistentRoute.path[currentIndex]} icon={CarIcon}><Popup><b>Your Ride</b></Popup></Marker>
                             </>
                         )}
 
+                        {/* Route Options (Before Booking) */}
                         {!activeBooking && routes.map(r => (
-                            <Polyline
+                            <DirectionsRenderer
                                 key={r.id}
                                 positions={r.path}
-                                pathOptions={{
-                                    color: r.mode.includes('Blue') ? '#0d6efd' : '#2ecc71',
-                                    weight: selectedRouteId === r.id ? 8 : 4,
-                                    opacity: selectedRouteId === r.id ? 0.8 : 0.4
-                                }}
+                                color={r.color || '#2ecc71'}
+                                weight={selectedRouteId === r.id ? 8 : 4}
+                                opacity={selectedRouteId === r.id ? 0.9 : 0.5}
                             />
                         ))}
 
-                        {/* Hide other vehicles if ride is active */}
+                        {/* Available Vehicles */}
                         {!activeBooking && liveVehicles.map(v => (
                             <Marker key={v.id} position={[v.latitude, v.longitude]} icon={CarIcon}>
                                 <Popup><b>{v.driverName}</b><br />{v.model}</Popup>
@@ -600,115 +402,346 @@ const CustomerDashboard = ({ logout }) => {
                         ))}
                     </MapContainer>
                 </div>
+
+                {/* --- Left Floating Panel (Booking Flow) --- */}
+                {activeView === 'book' && (
+                    <div className="position-absolute top-0 start-0 h-100 p-3 overflow-hidden d-none d-md-block" style={{ width: '420px', zIndex: 10 }}>
+                        <Card className="h-100 d-flex flex-column shadow-lg border-0" noPadding>
+                            <div className="p-4 flex-column h-100 overflow-auto">
+                                <h4 className="fw-bold mb-4">Where to go?</h4>
+
+                                {/* Search Form */}
+                                {!activeBooking && (
+                                    <form onSubmit={handleSearch} className="mb-4">
+                                        <div className="mb-3 position-relative">
+                                            <MapPin className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" size={18} />
+                                            <input
+                                                list="recommendations-list"
+                                                className="form-control ps-5 py-3 rounded-3"
+                                                placeholder="Pickup Location"
+                                                value={pickup}
+                                                onChange={(e) => {
+                                                    setPickup(e.target.value);
+                                                    const match = travelSuggestions.find(s => s.label === e.target.value);
+                                                    if (match) { setPickup(match.startLocation); setDrop(match.endLocation); }
+                                                }}
+                                                style={{ backgroundColor: 'var(--bg-app)', border: 'none', color: 'var(--text-main)' }}
+                                            />
+                                        </div>
+                                        <div className="mb-3 position-relative">
+                                            <Navigation className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" size={18} />
+                                            <input
+                                                type="text"
+                                                className="form-control ps-5 py-3 rounded-3"
+                                                placeholder="Destination"
+                                                value={drop}
+                                                onChange={(e) => setDrop(e.target.value)}
+                                                style={{ backgroundColor: 'var(--bg-app)', border: 'none', color: 'var(--text-main)' }}
+                                            />
+                                        </div>
+
+                                        {/* Date Input */}
+                                        <div className="mb-3 position-relative">
+                                            <Calendar className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" size={18} />
+                                            <input
+                                                type="date"
+                                                className="form-control ps-5 py-3 rounded-3"
+                                                value={bookingDate}
+                                                onChange={(e) => setBookingDate(e.target.value)}
+                                                style={{ backgroundColor: 'var(--bg-app)', border: 'none', color: 'var(--text-main)' }}
+                                            />
+                                        </div>
+
+                                        {/* Time Input */}
+                                        <div className="mb-3 position-relative">
+                                            <Clock className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" size={18} />
+                                            <input
+                                                type="time"
+                                                className="form-control ps-5 py-3 rounded-3"
+                                                value={bookingTime}
+                                                onChange={(e) => setBookingTime(e.target.value)}
+                                                style={{ backgroundColor: 'var(--bg-app)', border: 'none', color: 'var(--text-main)' }}
+                                            />
+                                        </div>
+
+                                        <datalist id="recommendations-list">
+                                            {travelSuggestions.map((s, i) => <option key={i} value={s.label}>{s.startLocation} to {s.endLocation}</option>)}
+                                        </datalist>
+                                        <Button type="submit" className="w-100 py-3 rounded-3 shadow-sm">{loading ? 'Searching...' : 'Find Route'}</Button>
+                                    </form>
+                                )}
+
+                                {/* Route Selection */}
+                                {routes.length > 0 && !activeBooking && (
+                                    <div className="mb-4">
+                                        <h6 className="text-muted text-uppercase small fw-bold mb-3">Suggested Routes</h6>
+                                        <div className="d-flex gap-2 overflow-auto pb-2">
+                                            {routes.map(r => (
+                                                <div
+                                                    key={r.id}
+                                                    className={`p-3 rounded-3 cursor-pointer border ${selectedRouteId === r.id ? 'border-primary bg-primary-subtle' : 'bg-light'}`}
+                                                    onClick={() => setSelectedRouteId(r.id)}
+                                                    style={{ minWidth: '140px' }}
+                                                >
+                                                    <div className="fw-bold text-primary">{r.duration}</div>
+                                                    <small className="text-muted">{r.distance}</small>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Vehicle List */}
+                                {tripsResults.length > 0 && !activeBooking && (
+                                    <div className="flex-grow-1">
+                                        <h6 className="text-muted text-uppercase small fw-bold mb-3">Available Rides</h6>
+                                        <div className="d-flex flex-column gap-3">
+                                            {tripsResults.map((res) => {
+                                                const v = res.vehicle || {};
+                                                const d = res.driver || {};
+                                                return (
+                                                    <div
+                                                        key={res.trip.id}
+                                                        className={`p-3 rounded-3 border hover-bg-light cursor-pointer transition-all ${selectedTripResult?.trip.id === res.trip.id ? 'border-primary ring-1' : ''}`}
+                                                        onClick={() => { setSelectedTripResult(res); openBookingModal(v); }}
+                                                    >
+                                                        {/* Header: Model & Price */}
+                                                        <div className="d-flex justify-content-between align-items-start mb-2">
+                                                            <div>
+                                                                <div className="d-flex align-items-center gap-2">
+                                                                    <h6 className="mb-0 fw-bold">{v.model || 'Vehicle'}</h6>
+                                                                    {d.isOnline && <span className="badge bg-success-subtle text-success" style={{ fontSize: '0.65rem' }}>ONLINE</span>}
+                                                                </div>
+                                                                <div className="d-flex gap-2 text-muted x-small mt-1">
+                                                                    <span className="badge bg-light text-secondary border">{v.type || 'Sedan'}</span>
+                                                                    {v.ev && <span className="badge bg-success-subtle text-success">EV</span>}
+                                                                    <span className="align-self-center" style={{ fontSize: '0.75rem' }}>{v.numberPlate}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-end">
+                                                                <span className="fw-bold text-primary d-block">₹{res.trip.pricePerSeat}</span>
+                                                                <small className="text-muted" style={{ fontSize: '0.7rem' }}>/seat</small>
+                                                            </div>
+                                                        </div>
+
+                                                        <hr className="my-2 dashed text-muted opacity-25" />
+
+                                                        {/* Footer: Driver & Stats */}
+                                                        <div className="d-flex justify-content-between align-items-center">
+                                                            <div className="d-flex align-items-center gap-2">
+                                                                <img
+                                                                    src={v.driverPhotoUrl || "https://randomuser.me/api/portraits/men/32.jpg"}
+                                                                    alt="Driver"
+                                                                    className="rounded-circle border"
+                                                                    width="24"
+                                                                    height="24"
+                                                                />
+                                                                <small className="text-dark fw-medium">{d.name || 'Driver'}</small>
+                                                            </div>
+                                                            <div className="d-flex gap-3 small text-secondary">
+                                                                <span className="d-flex align-items-center gap-1" title="Rating">
+                                                                    <Star size={12} className="text-warning fill-warning" /> {v.driverRating || '4.8'}
+                                                                </span>
+                                                                <span className="d-flex align-items-center gap-1" title="Seats">
+                                                                    <User size={12} /> {v.seats || 4}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Active Booking Status */}
+                                {activeBooking && (
+                                    <div className="mt-auto">
+                                        <div className="alert alert-primary border-0 d-flex flex-column align-items-center p-4">
+                                            <div className="spinner-border text-primary mb-3"></div>
+                                            <h5 className="fw-bold">Ride in Progress</h5>
+                                            <p className="text-center small mb-0">Your driver <b>{activeBooking.vehicle.driverName}</b> is on the way.</p>
+                                        </div>
+                                        <div className="d-flex gap-2 mt-3">
+                                            <Card className="flex-fill text-center p-2 bg-light border-0">
+                                                <small className="text-muted d-block uppercase x-small">ETA</small>
+                                                <span className="fw-bold">{activeBooking.estimatedDuration}</span>
+                                            </Card>
+                                            <Card className="flex-fill text-center p-2 bg-primary text-white border-0">
+                                                <small className="text-white-50 d-block uppercase x-small">TIME</small>
+                                                <span className="fw-bold">{formatTime(elapsedSeconds)}</span>
+                                            </Card>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+                    </div>
+                )}
+
+                {/* --- Trip History Mode (Full Overlay) --- */}
+                {activeView === 'trips' && (
+                    <div className="position-absolute top-0 start-0 w-100 h-100 p-4" style={{ zIndex: 20, backgroundColor: 'var(--bg-app)', overflowY: 'auto' }}>
+                        <div className="container" style={{ maxWidth: '800px' }}>
+                            <div className="d-flex justify-content-between align-items-center mb-4">
+                                <h3 className="fw-bold m-0">Trip History</h3>
+                                <Button variant="ghost" onClick={() => setActiveView('book')}>Close</Button>
+                            </div>
+
+                            {myTrips.length === 0 ? (
+                                <div className="text-center py-5 text-muted">No trips found.</div>
+                            ) : (
+                                <div className="d-flex flex-column gap-3">
+                                    {myTrips.map(trip => (
+                                        <Card key={trip.id} className="d-flex flex-column flex-md-row gap-4 align-items-center">
+                                            <div className="bg-light p-3 rounded-3 d-flex flex-column align-items-center" style={{ minWidth: '100px' }}>
+                                                <Calendar size={24} className="text-primary mb-2" />
+                                                <small className="fw-bold">{new Date(trip.startTime || trip.scheduledStartTime).getDate()}</small>
+                                                <small className="text-muted text-uppercase" style={{ fontSize: '10px' }}>
+                                                    {new Date(trip.startTime || trip.scheduledStartTime).toLocaleString('default', { month: 'short' })}
+                                                </small>
+                                            </div>
+                                            <div className="flex-grow-1 w-100">
+                                                <div className="d-flex justify-content-between align-items-start mb-2">
+                                                    <div>
+                                                        <h6 className="fw-bold mb-1">{trip.startLocation} → {trip.endLocation}</h6>
+                                                        <span className={`badge ${trip.status === 'COMPLETED' ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'}`}>
+                                                            {trip.status}
+                                                        </span>
+                                                    </div>
+                                                    <h5 className="fw-bold text-primary">₹{trip.amount}</h5>
+                                                </div>
+                                                <p className="text-muted small mb-0">
+                                                    Vehicle: {trip.vehicle?.model} • Duration: {trip.estimatedDuration}
+                                                </p>
+                                            </div>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- Profile Mode (Full Overlay) --- */}
+                {activeView === 'profile' && (
+                    <div className="position-absolute top-0 start-0 w-100 h-100 p-4 animate__animated animate__fadeIn" style={{ zIndex: 25, backgroundColor: 'var(--bg-app)', overflowY: 'auto' }}>
+                        <div className="container" style={{ maxWidth: '800px' }}>
+                            <div className="d-flex justify-content-between align-items-center mb-4">
+                                <h3 className="fw-bold m-0">My Profile</h3>
+                                <Button variant="ghost" onClick={() => setActiveView('book')}>Close</Button>
+                            </div>
+                            <ProfileSection userId={sessionStorage.getItem('userId')} />
+                        </div>
+                    </div>
+                )}
+
+                {/* --- Modals --- */}
+                {showBookingModal && (
+                    <div className="modal-backdrop-glass d-flex align-items-center justify-content-center" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1050, background: 'rgba(0,0,0,0.5)' }}>
+                        <div className="bg-white rounded-4 shadow-lg overflow-hidden" style={{ width: '450px', maxWidth: '90%' }}>
+                            <div className="bg-primary p-3 text-white d-flex justify-content-between align-items-center">
+                                <h5 className="fw-bold mb-0">Confirm Booking</h5>
+                                <button className="btn-close btn-close-white" onClick={() => setShowBookingModal(false)}></button>
+                            </div>
+                            <div className="p-4">
+                                {/* Driver & Vehicle Header */}
+                                <div className="d-flex align-items-center mb-4">
+                                    <img
+                                        src={selectedVehicle?.driverPhotoUrl || "https://randomuser.me/api/portraits/men/32.jpg"}
+                                        className="rounded-circle border me-3"
+                                        width="60" height="60"
+                                        alt="Driver"
+                                    />
+                                    <div>
+                                        <h5 className="fw-bold mb-0">{selectedVehicle?.driverName || 'Driver'}</h5>
+                                        <div className="text-muted small mb-1">{selectedVehicle?.model} • {selectedVehicle?.numberPlate}</div>
+                                        <div className="d-flex align-items-center gap-1 small text-warning">
+                                            <Star size={12} fill="orange" />
+                                            <span className="text-dark fw-bold">{selectedVehicle?.driverRating || '4.8'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Card className="bg-light border-0 mb-4 p-3">
+                                    <div className="d-flex justify-content-between mb-2">
+                                        <small className="text-muted">From</small>
+                                        <small className="fw-bold text-end">{pickup || 'Start Location'}</small>
+                                    </div>
+                                    <div className="d-flex justify-content-between mb-2">
+                                        <small className="text-muted">To</small>
+                                        <small className="fw-bold text-end">{drop || 'End Location'}</small>
+                                    </div>
+                                    <hr className="my-2 dashed" />
+                                    <div className="d-flex justify-content-between align-items-center">
+                                        <span className="fw-bold text-primary">Est. Price</span>
+                                        <span className="fw-bold fs-5">₹{150 + (selectedVehicle?.id || 0) * 10}</span>
+                                    </div>
+                                </Card>
+
+                                <div className="mb-3">
+                                    <label className="form-label small fw-bold text-muted">Trip Schedule</label>
+                                    <div className="d-flex gap-2">
+                                        <input type="date" className="form-control" value={bookingDate} onChange={e => setBookingDate(e.target.value)} />
+                                        <input type="time" className="form-control" value={bookingTime} onChange={e => setBookingTime(e.target.value)} />
+                                    </div>
+                                </div>
+
+
+                                <div className="d-flex gap-2 mt-4">
+                                    <Button variant="ghost" className="flex-fill" onClick={() => setShowBookingModal(false)}>Cancel</Button>
+                                    <Button className="flex-fill shadow" onClick={confirmBooking}>
+                                        Confirm & Book
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {showReviewModal && (
+                    <div className="modal-backdrop-glass d-flex align-items-center justify-content-center" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1060, background: 'rgba(0,0,0,0.5)' }}>
+                        <Card className="p-4 text-center" style={{ width: '400px' }}>
+                            <div className="mb-3">
+                                <div className="d-inline-flex bg-warning bg-opacity-10 p-3 rounded-circle text-warning mb-3">
+                                    <Star size={32} />
+                                </div>
+                                <h4>Rate your Trip</h4>
+                            </div>
+                            <div className="d-flex justify-content-center gap-2 mb-4">
+                                {[1, 2, 3, 4, 5].map(s => (
+                                    <Star
+                                        key={s}
+                                        size={28}
+                                        fill={s <= reviewForm.rating ? "orange" : "none"}
+                                        color={s <= reviewForm.rating ? "orange" : "#ddd"}
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => setReviewForm({ ...reviewForm, rating: s })}
+                                    />
+                                ))}
+                            </div>
+                            <textarea
+                                className="form-control mb-3"
+                                rows="3"
+                                placeholder="How was your ride?"
+                                value={reviewForm.comment}
+                                onChange={e => setReviewForm({ ...reviewForm, comment: e.target.value })}
+                            ></textarea>
+                            <Button className="w-100" onClick={submitReview}>Submit Feedback</Button>
+                        </Card>
+                    </div>
+                )}
+
+                {selectedTripResult && (
+                    <DriverDetailsModal
+                        result={selectedTripResult}
+                        onClose={() => setSelectedTripResult(null)}
+                        onSelect={() => openBookingModal(selectedTripResult.vehicle)}
+                    />
+                )}
+
             </div>
-
-            {showBookingModal && (
-                <>
-                    <div className="modal-backdrop fade show" style={{ zIndex: 1100 }}></div>
-                    <div className="modal fade show d-block" style={{ zIndex: 1110 }}>
-                        <div className="modal-dialog modal-dialog-centered">
-                            <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                                <div className="modal-header bg-primary text-white border-0 p-4">
-                                    <h4 className="modal-title fw-bold">Professional Booking 🚗</h4>
-                                    <button type="button" className="btn-close btn-close-white" onClick={() => setShowBookingModal(false)}></button>
-                                </div>
-                                <div className="modal-body p-4">
-                                    <div className="card bg-light border-0 rounded-4 p-3 mb-4">
-                                        <div className="d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <h6 className="mb-1 fw-bold text-primary">{selectedVehicle?.model}</h6>
-                                                <small className="text-muted">{selectedVehicle?.type} • {selectedVehicle?.seats} Seater</small>
-                                            </div>
-                                            <div className="text-end">
-                                                <div className="badge bg-success mb-1">Available Now</div>
-                                                <h5 className="mb-0 fw-bold">₹{(150 + (selectedVehicle?.id || 0) * 10) + (selectedDuration * 125)}</h5>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="mb-4">
-                                        <label className="form-label small fw-bold text-uppercase text-muted">Pickup Schedule</label>
-                                        <div className="input-group">
-                                            <span className="input-group-text bg-white border-end-0">📅</span>
-                                            <input type="datetime-local" className="form-control border-start-0" value={bookingTime} onChange={e => setBookingTime(e.target.value)} min={new Date().toISOString().slice(0, 16)} />
-                                        </div>
-                                        <small className="text-muted mt-2 d-block">Schedule your ride in advance or keep it for now.</small>
-                                    </div>
-
-                                    <div className="mb-4">
-                                        <label className="form-label d-flex justify-content-between small fw-bold text-uppercase text-muted">
-                                            <span>Reservation Duration</span>
-                                            <span className="text-primary">{selectedDuration} Hours</span>
-                                        </label>
-                                        <input type="range" className="form-range" min="1" max="12" step="1" value={selectedDuration} onChange={e => setSelectedDuration(parseInt(e.target.value))} />
-                                        <div className="d-flex justify-content-between x-small text-muted mt-1" style={{ fontSize: '0.75rem' }}>
-                                            <span>1 Hr</span>
-                                            <span>6 Hrs</span>
-                                            <span>12 Hrs</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="alert alert-warning border-0 rounded-4 p-3">
-                                        <div className="d-flex">
-                                            <span className="me-3 fs-3">💰</span>
-                                            <div>
-                                                <h6 className="mb-1 fw-bold">Transparent Pricing</h6>
-                                                <small>Base: ₹{150 + (selectedVehicle?.id || 0) * 10} + Service: ₹{selectedDuration * 125} (@ ₹125/hr)</small>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <button className="btn btn-primary w-100 py-3 fw-bold rounded-4 shadow-lg transition-all" onClick={confirmBooking}>
-                                        BOOK JOURNEY NOW
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {showReviewModal && (
-                <>
-                    <div className="modal-backdrop fade show" style={{ zIndex: 1050 }}></div>
-                    <div className="modal fade show d-block" style={{ zIndex: 1060 }}>
-                        <div className="modal-dialog modal-dialog-centered">
-                            <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                                <div className="modal-header bg-warning border-0 p-4">
-                                    <h4 className="modal-title fw-bold text-dark">Trip Finished! 🏁</h4>
-                                </div>
-                                <div className="modal-body p-4 text-center">
-                                    <h5 className="mb-4">Rate your ride with <span className="text-primary">{activeBooking?.vehicle.driverName}</span></h5>
-                                    <div className="display-4 mb-4">
-                                        {[1, 2, 3, 4, 5].map(s => (
-                                            <span key={s} className="pointer px-1" style={{ cursor: 'pointer', color: s <= reviewForm.rating ? '#ffc107' : '#dee2e6' }} onClick={() => setReviewForm({ ...reviewForm, rating: s })}>★</span>
-                                        ))}
-                                    </div>
-                                    <textarea className="form-control rounded-3 border-0 bg-light p-3 mb-4" rows="3" placeholder="Feedback..." value={reviewForm.comment} onChange={(e) => setReviewForm({ ...reviewForm, comment: e.target.value })}></textarea>
-                                    <button className="btn btn-primary w-100 py-3 fw-bold rounded-3 shadow" onClick={submitReview}>Submit Feedback</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            <style>{`
-                .vehicle-marker-transition { transition: all 2.1s linear; }
-                .pointer { cursor: pointer; }
-                .selection-card:hover { transform: translateY(-5px); }
-                .selection-card.active { border: 2px solid #0d6efd !important; background: #f0f7ff; }
-                .transition-all { transition: all 0.3s ease; }
-                .animate-glamor {
-                    animation: glamor-pulse 3s infinite ease-in-out;
-                }
-                @keyframes glamor-pulse {
-                    0% { transform: scale(1); box-shadow: 0 0 5px rgba(13, 110, 253, 0.5); }
-                    50% { transform: scale(1.05); box-shadow: 0 0 20px rgba(13, 110, 253, 0.8); }
-                    100% { transform: scale(1); box-shadow: 0 0 5px rgba(13, 110, 253, 0.5); }
-                }
-            `}</style>
-        </div>
+        </MainLayout>
     );
 };
 

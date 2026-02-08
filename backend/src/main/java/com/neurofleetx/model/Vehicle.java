@@ -18,40 +18,62 @@ public class Vehicle {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     private String name; // e.g. "V001" (Internal ID)
     private String model; // e.g. "Toyota Innova"
     private String numberPlate; // e.g. "TN 09 AZ 1234"
-    
+
     private String driverName; // e.g. "Rajesh K"
     private String driverContact; // e.g. "+91 9876543210"
     private Double driverRating; // e.g. 4.8
-    
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
+    private String driverPhotoUrl; // Profile Photo URL
+
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
+    private String driverLicenseUrl; // License Photo URL
+
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
+    private String identificationUrl; // Other ID URL
+
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
+    private String vehiclePhotoUrl; // Vehicle Photo URL (Main - for backward compat)
+
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
+    private String vehiclePhotosList; // JSON Array of all photos ["url1", "url2"]
+
+    private String documentStatus; // Verified, Not-Verified, Pending
+    private String driverEmail; // Added for verification link
+
     private String type; // SUV, Sedan
     private Integer seats; // e.g. 4 or 6
     private Boolean ev;
-    
+
     // Status: Active, Idle, Maintenance, Enroute
-    private String status; 
-    
+    private String status;
+
     private Double latitude;
     private Double longitude;
     private Integer batteryPercent;
     private Integer fuelPercent;
-    
+
     // Telemetry & Health (Module 2 & 4)
     private Double speed; // km/h
     private Double odometer; // total distance
     private Double tirePressure; // PSI
-    
+
     // Module 4: Predictive Maintenance
     private Double engineHealth; // 0-100
     private Double tireWear; // 0-100
     private Double batteryHealth; // 0-100
     private LocalDateTime nextMaintenanceDate;
-    
+
     @Transient
     private Boolean aiRecommended = false;
-    
+
     private LocalDateTime lastUpdate;
 }

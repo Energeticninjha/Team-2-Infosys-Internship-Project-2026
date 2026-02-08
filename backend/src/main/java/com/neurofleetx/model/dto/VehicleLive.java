@@ -18,10 +18,11 @@ public class VehicleLive {
     private double longitude;
     private int speed;
     private String eta;
-    
+
     // New Fields
     private String numberPlate;
     private String driverContact;
     private Double driverRating;
+    private String driverPhotoUrl; // Added for UI
     private int seats;
 }

@@ -1,41 +1,147 @@
+/* Global Theme Variables */
+:root {
+  /* Premium Light Mode (Default) */
+  --bg-app: #f8fafc;
+  /* Slate 50 */
+  --bg-panel: #ffffff;
+  /* White */
+  --text-main: #0f172a;
+  /* Slate 900 */
+  --text-secondary: #334155;
+  /* Slate 700 */
+  --text-muted: #64748b;
+  /* Slate 500 */
+  --border-subtle: #e2e8f0;
+  /* Slate 200 */
+  --primary: #0d6efd;
+  --bg-hover: #f1f5f9;
+  /* Slate 100 */
+  --bg-panel-glass: rgba(255, 255, 255, 0.7);
+
+  /* Shared Colors */
+  --nfx-primary: #0d6efd;
+}
+
+/* Premium Dark Mode */
+[data-theme='dark'] {
+  --bg-app: #0f172a;
+  /* Slate 900 */
+  --bg-panel: #1e293b;
+  /* Slate 800 */
+  --text-main: #f8fafc;
+  /* Slate 50 */
+  --text-secondary: #cbd5e1;
+  /* Slate 300 */
+  --text-muted: #94a3b8;
+  /* Slate 400 */
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-panel-glass: rgba(30, 41, 59, 0.7);
+}
+
+/* Global Resets & Typography */
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-@media print {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--text-main);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
 
-  .no-print,
-  .sidebar,
-  .navbar,
-  .btn {
-    display: none !important;
-  }
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.2s;
+}
 
-  .card {
-    border: none !important;
-    box-shadow: none !important;
-  }
+a:hover {
+  color: var(--primary);
+  filter: brightness(1.2);
+}
 
-  .print-only-table {
-    display: block !important;
-    width: 100%;
-  }
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
 
-  body,
-  html,
-  #root {
-    width: 100%;
-    height: auto;
-    overflow: visible;
-  }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* Utility Helpers for Theme */
+.text-theme-main {
+  color: var(--text-main) !important;
+}
+
+.text-theme-muted,
+.text-muted {
+  color: var(--text-muted) !important;
+}
+
+.bg-theme-panel {
+  background-color: var(--bg-panel) !important;
+}
+
+/* Form Control Overrides for Theming */
+.form-control {
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+}
+
+.form-control:focus {
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
 }

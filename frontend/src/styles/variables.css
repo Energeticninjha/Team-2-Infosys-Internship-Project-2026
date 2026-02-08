@@ -1,0 +1,106 @@
+/* HSL Color System - NeuroFleetX Premium */
+:root {
+    /* BrandHue: Indigo/Blue */
+    --brand-h: 226;
+    --brand-s: 70%;
+    --brand-l: 55%;
+
+    /* Neutral Hues: Slate */
+    --neutral-h: 215;
+    --neutral-s: 16%;
+
+    /* --- Light Theme Defaults --- */
+
+    /* Backgrounds */
+    --bg-app: hsl(var(--neutral-h), 25%, 97%);
+    /* #F8FAFC */
+    --bg-panel: hsl(0, 0%, 100%);
+    /* #FFFFFF */
+    --bg-panel-glass: hsla(0, 0%, 100%, 0.9);
+    /* Glassy White */
+    --bg-hover: hsl(var(--neutral-h), 20%, 96%);
+    /* F1F5F9 */
+
+    /* Text */
+    --text-main: hsl(var(--neutral-h), 28%, 13%);
+    /* #0F172A */
+    --text-secondary: hsl(var(--neutral-h), 14%, 48%);
+    /* #64748B */
+    --text-muted: hsl(var(--neutral-h), 13%, 65%);
+    /* #94A3B8 */
+
+    /* Brand */
+    --primary: hsl(var(--brand-h), var(--brand-s), var(--brand-l));
+    --primary-glow: hsla(var(--brand-h), var(--brand-s), var(--brand-l), 0.2);
+    --primary-fg: #ffffff;
+
+    /* Borders */
+    --border-subtle: hsl(var(--neutral-h), 20%, 92%);
+    /* #E2E8F0 */
+    --border-strong: hsl(var(--neutral-h), 16%, 84%);
+    /* #CBD5E1 */
+
+    /* Shadow */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+    /* Status */
+    --status-success: 142, 71%, 45%;
+    /* Emerald */
+    --status-warning: 32, 95%, 44%;
+    /* Orange */
+    --status-error: 0, 84%, 60%;
+    /* Red */
+}
+
+[data-theme='dark'] {
+    /* --- Dark Theme Overrides --- */
+
+    /* Backgrounds */
+    --bg-app: hsl(var(--neutral-h), 28%, 10%);
+    /* #0F172A */
+    --bg-panel: hsl(var(--neutral-h), 28%, 13%);
+    /* #1E293B */
+    --bg-panel-glass: hsla(var(--neutral-h), 28%, 13%, 0.85);
+    --bg-hover: hsl(var(--neutral-h), 28%, 17%);
+    /* Clean highlight */
+
+    /* Text */
+    --text-main: hsl(var(--neutral-h), 10%, 96%);
+    /* #F1F5F9 */
+    --text-secondary: hsl(var(--neutral-h), 10%, 65%);
+    /* #94A3B8 */
+    --text-muted: hsl(var(--neutral-h), 10%, 45%);
+
+    /* Brand */
+    --primary: hsl(var(--brand-h), 80%, 65%);
+    /* Brighter Indigo */
+    --primary-glow: hsla(var(--brand-h), 80%, 65%, 0.15);
+    --primary-fg: #ffffff;
+
+    /* Borders */
+    --border-subtle: hsl(var(--neutral-h), 20%, 20%);
+    --border-strong: hsl(var(--neutral-h), 20%, 30%);
+
+    /* Shadow - Glows for Dark Mode */
+    --shadow-sm: 0 0 0 1px hsla(0, 0%, 100%, 0.05);
+    --shadow-md: 0 0 0 1px hsla(0, 0%, 100%, 0.05), 0 4px 6px -1px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 0 0 1px hsla(0, 0%, 100%, 0.05), 0 10px 15px -3px rgb(0 0 0 / 0.7);
+}
+
+/* Global Transition */
+body,
+.nfx-card,
+.nfx-sidebar,
+.nfx-navbar {
+    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Base Styles using Variables */
+body {
+    background-color: var(--bg-app);
+    color: var(--text-main);
+}

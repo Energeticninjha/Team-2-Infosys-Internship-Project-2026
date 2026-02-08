@@ -6,6 +6,7 @@ import { HeatmapLayer } from 'react-leaflet-heatmap-layer-v3';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Pie, Bar } from 'react-chartjs-2';
+import '../../styles/dashboard.css';
 import { CSVLink } from 'react-csv';
 import {
     Chart as ChartJS,
@@ -81,16 +82,16 @@ const AdminDashboard = ({ logout }) => {
             const token = localStorage.getItem('token');
             const config = { headers: { Authorization: `Bearer ${token}` } };
             try {
-                const kpiRes = await axios.get('http://localhost:8080/api/admin/kpi', config);
+                const kpiRes = await axios.get('http://localhost:8083/api/admin/kpi', config);
                 setStats(kpiRes.data);
 
-                const vRes = await axios.get('http://localhost:8080/api/vehicles', config);
+                const vRes = await axios.get('http://localhost:8083/api/vehicles', config);
                 setVehicles(vRes.data);
 
-                const uRes = await axios.get('http://localhost:8080/api/admin/users', config);
+                const uRes = await axios.get('http://localhost:8083/api/admin/users', config);
                 setUsers(uRes.data);
 
-                const bRes = await axios.get('http://localhost:8080/api/bookings', config);
+                const bRes = await axios.get('http://localhost:8083/api/bookings', config);
                 setBookings(bRes.data);
 
                 // Derived fleet stats
@@ -112,7 +113,7 @@ const AdminDashboard = ({ logout }) => {
         if (window.confirm("Are you sure you want to delete this user?")) {
             const token = localStorage.getItem('token');
             try {
-                await axios.delete(`http://localhost:8080/api/admin/users/${id}`, {
+                await axios.delete(`http://localhost:8083/api/admin/users/${id}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setUsers(users.filter(u => u.id !== id));
@@ -150,7 +151,7 @@ const AdminDashboard = ({ logout }) => {
     return (
         <div className="container-fluid p-0 min-vh-100">
             {/* Navbar (Hidden in Print) */}
-            <nav className="navbar navbar-dark bg-danger shadow-sm no-print">
+            <nav className="navbar navbar-dark bg-primary shadow-sm no-print">
                 <div className="container-fluid">
                     <span className="navbar-brand fw-bold">🚗 NeuroFleetX - Admin Panel</span>
                     <button className="btn btn-outline-light btn-sm fw-bold" onClick={logout}>Logout</button>
@@ -164,7 +165,7 @@ const AdminDashboard = ({ logout }) => {
                     <ul className="nav flex-column">
                         <li className="mb-2">
                             <button
-                                className={`nav-link btn btn-link text-white w-100 text-start rounded-3 ${activeView === 'analytics' ? 'bg-danger' : ''}`}
+                                className={`nav-link btn btn-link text-white w-100 text-start rounded-3 ${activeView === 'analytics' ? 'bg-primary' : ''}`}
                                 onClick={() => setActiveView('analytics')}
                             >
                                 <span className="me-2">📊</span> Analytics
@@ -172,7 +173,7 @@ const AdminDashboard = ({ logout }) => {
                         </li>
                         <li className="mb-2">
                             <button
-                                className={`nav-link btn btn-link text-white w-100 text-start rounded-3 ${activeView === 'fleet' ? 'bg-danger' : ''}`}
+                                className={`nav-link btn btn-link text-white w-100 text-start rounded-3 ${activeView === 'fleet' ? 'bg-primary' : ''}`}
                                 onClick={() => setActiveView('fleet')}
                             >
                                 <span className="me-2">🚗</span> Fleet Mgmt
@@ -180,7 +181,7 @@ const AdminDashboard = ({ logout }) => {
                         </li>
                         <li className="mb-2">
                             <button
-                                className={`nav-link btn btn-link text-white w-100 text-start rounded-3 ${activeView === 'trips' ? 'bg-danger' : ''}`}
+                                className={`nav-link btn btn-link text-white w-100 text-start rounded-3 ${activeView === 'trips' ? 'bg-primary' : ''}`}
                                 onClick={() => setActiveView('trips')}
                             >
                                 <span className="me-2">🛣️</span> Trips
@@ -188,7 +189,7 @@ const AdminDashboard = ({ logout }) => {
                         </li>
                         <li className="mb-2">
                             <button
-                                className={`nav-link btn btn-link text-white w-100 text-start rounded-3 ${activeView === 'users' ? 'bg-danger' : ''}`}
+                                className={`nav-link btn btn-link text-white w-100 text-start rounded-3 ${activeView === 'users' ? 'bg-primary' : ''}`}
                                 onClick={() => setActiveView('users')}
                             >
                                 <span className="me-2">👥</span> Users

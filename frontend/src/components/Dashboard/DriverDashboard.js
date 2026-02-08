@@ -3,7 +3,14 @@ import axios from 'axios';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import './DriverDashboard.css';
+import '../../styles/dashboard.css';
+import ProfileSection from './ProfileSection';
+import TripPostingComponent from './TripPostingComponent';
+
+// New Design System
+import MainLayout from '../Layout/MainLayout';
+import Card from '../Common/Card';
+import Button from '../Common/Button';
 
 // Fix Leaflet marker icon issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -22,142 +29,309 @@ const CarIcon = new L.Icon({
 
 const RecenterMap = ({ coords }) => {
     const map = useMap();
-    useEffect(() => {
-        if (coords) map.setView(coords);
-    }, [coords, map]);
+    useEffect(() => { if (coords) map.setView(coords); }, [coords, map]);
     return null;
 };
 
 const DriverDashboard = ({ logout }) => {
     // 1. Core State
-    const [driverName] = useState(localStorage.getItem('name') || "Ramesh Driver");
-    const [driverEmail] = useState(localStorage.getItem('email') || "admin@gmail.com");
+    const driverName = sessionStorage.getItem('name') || 'Driver';
+    const driverId = sessionStorage.getItem('userId');
+    const [driverEmail] = useState(sessionStorage.getItem('email'));
+    const [activeView, setActiveView] = useState('dashboard');
+
+    // Mission Control Tabs
+    const [missionTab, setMissionTab] = useState('requests'); // 'requests' or 'current'
+
+    // Vehicle State
     const [vehicle, setVehicle] = useState(null);
+    const [loadingVehicle, setLoadingVehicle] = useState(true);
+    const [showRegister, setShowRegister] = useState(false);
+
+    // Mission State
     const [earnings, setEarnings] = useState({ totalEarnings: 0, completedTrips: 0, rating: 5.0 });
     const [reviews, setReviews] = useState([]);
-    const [activeBooking, setActiveBooking] = useState(null);
-    const [error, setError] = useState(null);
 
-    // 2. Navigation State
+    // Job Management
+    const [activeBooking, setActiveBooking] = useState(null);
+    const [jobRequests, setJobRequests] = useState([]);
+
+    // Navigation State
     const [currentPos, setCurrentPos] = useState([13.0827, 80.2707]);
     const [polyline, setPolyline] = useState([]);
-    const [routeInfo, setRouteInfo] = useState(null); // ETA/Distance
+    const [routeInfo, setRouteInfo] = useState(null);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isTripping, setIsTripping] = useState(false);
     const animationRef = useRef(null);
 
-    // 3. Initial Data Fetch & Polling
+    // Post Trip State
+    const [tripForm, setTripForm] = useState({ start: '', end: '', time: '' });
+    const [tripSuccess, setTripSuccess] = useState(null);
+
+    // Real-Time Telemetry State
+    const [driverStatus, setDriverStatus] = useState('Available');
+    const [telemetry, setTelemetry] = useState({ speed: 0, battery: 100, odometer: 0, fuelPercent: 100 });
+    const telemetryInterval = useRef(null);
+
+    const fetchBaseData = async () => {
+        if (!driverName) return;
+        try {
+            const vRes = await axios.get(`http://localhost:8083/api/vehicles/driver/${driverName}`);
+            if (vRes.data && vRes.data.driverName === driverName) {
+                setVehicle(vRes.data);
+                setTelemetry(prev => ({
+                    ...prev,
+                    battery: vRes.data.batteryPercent || prev.battery,
+                    odometer: vRes.data.odometer || prev.odometer,
+                    speed: vRes.data.speed || prev.speed
+                }));
+                if (vRes.data.status === 'Active') setDriverStatus('Available');
+                else if (vRes.data.status === 'Maintenance') setDriverStatus('Maintenance');
+                else if (vRes.data.status === 'Inactive') setDriverStatus('Offline');
+
+                if (!isTripping && vRes.data.latitude && vRes.data.longitude) setCurrentPos([vRes.data.latitude, vRes.data.longitude]);
+            } else { setVehicle(null); }
+        } catch (error) { setVehicle(null); }
+        finally { setLoadingVehicle(false); }
+    };
+
+    const refreshStats = async () => {
+        try {
+            const earnRes = await axios.get(`http://localhost:8083/api/driver/${driverName}/earnings`);
+            setEarnings(earnRes.data);
+            const revRes = await axios.get(`http://localhost:8083/api/driver/${driverName}/reviews`);
+            setReviews(revRes.data);
+        } catch (e) { }
+    };
+
+    // Telemetry Simulation
     useEffect(() => {
-        const fetchBaseData = async () => {
-            try {
-                // Fetch Vehicle Integration
-                const vRes = await axios.get(`http://localhost:8080/api/vehicles`);
-                const myVehicle = vRes.data.find(v => v.driverName === driverName || v.id === 1); // Fallback for demo
-                setVehicle(myVehicle);
-                if (myVehicle && !isTripping) {
-                    setCurrentPos([myVehicle.latitude, myVehicle.longitude]);
+        if (!vehicle || vehicle.status === 'Pending') return;
+        telemetryInterval.current = setInterval(() => {
+            setTelemetry(prev => {
+                let newSpeed = prev.speed;
+                let newBattery = prev.battery;
+                let newOdometer = prev.odometer;
+
+                if (isTripping) {
+                    newSpeed = Math.min(80, Math.max(20, prev.speed + (Math.random() - 0.5) * 10));
+                    newBattery = Math.max(0, prev.battery - 0.05);
+                    newOdometer = prev.odometer + (newSpeed / 3600);
+                } else {
+                    newSpeed = Math.max(0, prev.speed - 5);
+                    if (driverStatus === 'Available' && prev.battery < 100) newBattery = Math.min(100, prev.battery + 0.1);
                 }
+                return {
+                    speed: Math.round(newSpeed),
+                    battery: Math.round(newBattery * 10) / 10,
+                    odometer: Math.round(newOdometer * 10) / 10,
+                    fuelPercent: prev.fuelPercent
+                };
+            });
+        }, 1000);
+        return () => { if (telemetryInterval.current) clearInterval(telemetryInterval.current); };
+    }, [vehicle, isTripping, driverStatus]);
 
-                // Fetch Earnings & Reviews
-                refreshStats();
+    // Live Location Sync
+    useEffect(() => {
+        if (isTripping && vehicle) {
+            const syncInterval = setInterval(async () => {
+                try {
+                    // Update vehicle location in backend
+                    await axios.put(`http://localhost:8083/api/vehicles/${vehicle.id}`, {
+                        latitude: currentPos[0],
+                        longitude: currentPos[1],
+                        speed: telemetry.speed,
+                        batteryPercent: telemetry.battery,
+                        odometer: telemetry.odometer
+                    });
+                } catch (e) { console.error("Location sync failed", e); }
+            }, 3000); // Sync every 3 seconds
+            return () => clearInterval(syncInterval);
+        }
+    }, [isTripping, currentPos, vehicle, telemetry]);
 
-            } catch (error) { console.error("Base data fetch error", error); }
-        };
-
+    useEffect(() => {
         fetchBaseData();
-        const interval = setInterval(fetchBaseData, 10000); // Base data every 10s
+        refreshStats();
+        const interval = setInterval(fetchBaseData, 10000);
         return () => clearInterval(interval);
     }, [driverName, isTripping]);
 
-    // 4. Booking Listener (Poll every 5s for new CONFIRMED bookings)
+    // Booking Management
     const checkBookings = async () => {
-        if (activeBooking) return; // Don't look if already busy
+        if (!vehicle || vehicle.status === 'Pending') return;
         try {
-            console.log("🔍 [DriverDashboard] Polling for jobs for driver:", driverName);
-            // Try fetching for current user name
-            let bRes = await axios.get(`http://localhost:8080/api/driver/${driverName}/bookings`);
-            console.log(`✅ [DriverDashboard] Found ${bRes.data.length} jobs for ${driverName}`);
+            // Get all bookings for this driver (or vehicle)
+            // Ideally backend filters this, but for now we might fetch list
+            let bRes = await axios.get(`http://localhost:8083/api/driver/${driverName}/bookings`);
+            const allBookings = bRes.data || [];
 
-            // Fallback: If no jobs for current user, search across ALL bookings for a demo job
-            if (bRes.data.length === 0) {
-                console.log("⚠️ [DriverDashboard] No jobs for current user, checking all bookings for demo job...");
-                const allRes = await axios.get(`http://localhost:8080/api/bookings`);
-                const demoJob = allRes.data.find(b => b.status === 'CONFIRMED' || b.status === 'PENDING');
-                if (demoJob) {
-                    console.log("🎁 [DriverDashboard] Found a Demo Job:", demoJob);
-                    setActiveBooking(demoJob);
-                    return;
-                }
+            // Filter Active Job
+            const currentJob = allBookings.find(b => b.status === 'CONFIRMED' || b.status === 'ENROUTE');
+            if (currentJob) {
+                setActiveBooking(currentJob);
+                setMissionTab('current'); // Switch to My Job if active
+            } else {
+                setActiveBooking(null);
             }
 
-            const newJob = bRes.data.find(b => b.status === 'CONFIRMED');
-            if (newJob) {
-                setActiveBooking(newJob);
+            // Filter Requests
+            const requests = allBookings.filter(b => b.status === 'PENDING');
+            setJobRequests(requests);
+
+            // Notification for new request
+            if (requests.length > 0 && !activeBooking) {
+                // simple notify logic if needed
             }
-        } catch (e) {
-            console.error("❌ [DriverDashboard] Error polling bookings:", e);
-        }
+
+        } catch (e) { console.error("Polling error:", e); }
     };
 
     useEffect(() => {
         checkBookings();
         const interval = setInterval(checkBookings, 5000);
         return () => clearInterval(interval);
-    }, [driverName, activeBooking]);
+    }, [driverName, vehicle, activeBooking]);
 
-    const refreshStats = async () => {
+    const acceptJob = async (booking) => {
+        if (activeBooking) {
+            alert("You already have an active job! Complete it before accepting another.");
+            return;
+        }
         try {
-            const earnRes = await axios.get(`http://localhost:8080/api/driver/${driverName}/earnings`);
-            setEarnings(earnRes.data);
-            const revRes = await axios.get(`http://localhost:8080/api/driver/${driverName}/reviews`);
-            setReviews(revRes.data);
-        } catch (e) { }
+            await axios.put(`http://localhost:8083/api/bookings/${booking.id}/status`, { status: "CONFIRMED" });
+            setActiveBooking(booking);
+            setJobRequests(prev => prev.filter(b => b.id !== booking.id));
+            setMissionTab('current');
+            alert("Job Accepted! Head to My Job tab.");
+        } catch (e) {
+            alert("Failed to accept job.");
+        }
     };
 
-    // 5. Actions
+    const rejectJob = async (booking) => {
+        try {
+            await axios.put(`http://localhost:8083/api/bookings/${booking.id}/status`, { status: "CANCELLED" });
+            setJobRequests(prev => prev.filter(b => b.id !== booking.id));
+        } catch (e) {
+            alert("Failed to reject job.");
+        }
+    };
+
+    useEffect(() => {
+        if (activeBooking && (activeBooking.status === 'CONFIRMED' || activeBooking.status === 'ENROUTE')) {
+            // Ensure we are in mission view if there is a job
+            // setActiveView('mission'); 
+        }
+    }, [activeBooking]);
+
     const handleStatusChange = async (newStatus) => {
+        if (!vehicle) return;
         try {
-            await axios.put(`http://localhost:8080/api/driver/${driverName}/status`, { status: newStatus });
-            setVehicle(prev => ({ ...prev, status: newStatus }));
-        } catch (e) { }
+            let backendStatus = 'Active';
+            let isOnline = true;
+
+            if (newStatus === 'Maintenance') {
+                backendStatus = 'Maintenance';
+                isOnline = true;
+            }
+            else if (newStatus === 'Offline') {
+                backendStatus = 'Inactive';
+                isOnline = false;
+            }
+
+            await axios.put(`http://localhost:8083/api/vehicles/${vehicle.id}`, { status: backendStatus });
+            if (driverId) {
+                await axios.put(`http://localhost:8083/api/driver/${driverId}/online-status`, { isOnline });
+            }
+
+            setDriverStatus(newStatus);
+            fetchBaseData();
+        } catch (error) {
+            console.error("Status update failed", error);
+            alert("Failed to update status.");
+        }
     };
 
-    const acceptJob = async () => {
+    const toBase64 = file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
+
+    const registerVehicle = async (e) => {
+        e.preventDefault();
+        const form = e.target;
         try {
-            setActiveBooking(prev => ({ ...prev, accepted: true }));
-            // Mock sound or notification could go here
-        } catch (e) { alert("Failed to accept job."); }
+            const isFirstVehicle = !vehicle;
+            let driverPhotoBase64, licenseBase64, govIdBase64, driverContact;
+
+            if (isFirstVehicle) {
+                driverPhotoBase64 = form.driverPhoto.files[0] ? await toBase64(form.driverPhoto.files[0]) : "https://randomuser.me/api/portraits/men/32.jpg";
+                licenseBase64 = form.license.files[0] ? await toBase64(form.license.files[0]) : null;
+                govIdBase64 = form.govId.files[0] ? await toBase64(form.govId.files[0]) : null;
+                driverContact = form.phone.value;
+            } else {
+                driverPhotoBase64 = vehicle.driverPhotoUrl || "https://randomuser.me/api/portraits/men/32.jpg";
+                licenseBase64 = vehicle.driverLicenseUrl;
+                govIdBase64 = vehicle.identificationUrl;
+                driverContact = vehicle.driverContact;
+            }
+
+            let vehiclePhotosArray = [];
+            if (form.carPhotos.files && form.carPhotos.files.length > 0) {
+                const filePromises = Array.from(form.carPhotos.files).map(file => toBase64(file));
+                vehiclePhotosArray = await Promise.all(filePromises);
+            } else {
+                vehiclePhotosArray = ["https://cdni.iconscout.com/illustration/premium/thumb/electric-car-3454848-2886733.png"];
+            }
+
+            const newVehicle = {
+                driverName, driverEmail, driverContact,
+                driverPhotoUrl: driverPhotoBase64,
+                driverLicenseUrl: licenseBase64,
+                identificationUrl: govIdBase64,
+                model: form.model.value,
+                numberPlate: form.plate.value,
+                type: form.type.value,
+                seats: parseInt(form.seats.value),
+                vehiclePhotoUrl: vehiclePhotosArray[0],
+                vehiclePhotosList: JSON.stringify(vehiclePhotosArray),
+                status: "Pending",
+                documentStatus: "Pending",
+                latitude: 13.0827, longitude: 80.2707,
+                batteryPercent: 100, odometer: 0, driverRating: 5.0
+            };
+
+            await axios.post('http://localhost:8083/api/vehicles', newVehicle);
+            alert(isFirstVehicle ? "Vehicle Registration Submitted!" : "New Vehicle Added!");
+            fetchBaseData();
+            setVehicle({ ...newVehicle, status: 'Pending' });
+            setShowRegister(false);
+        } catch (e) { alert("Registration failed."); }
     };
 
     const startTrip = async () => {
         if (!activeBooking) return;
         try {
-            // 1. Update vehicle status to ENROUTE
-            await handleStatusChange('ENROUTE');
+            await axios.put(`http://localhost:8083/api/driver/${driverName}/status`, { status: 'ENROUTE' });
+            await axios.put(`http://localhost:8083/api/bookings/${activeBooking.id}/status`, { status: 'ENROUTE' });
 
-            // 2. Update booking status to ENROUTE (Sync backend)
-            await axios.put(`http://localhost:8080/api/bookings/${activeBooking.id}/status`, { status: 'ENROUTE' });
-
-            // 3. Fetch precise route path with traffic zones (Blue/Green)
-            const res = await axios.post('http://localhost:8080/api/fleet/optimize-route', {
-                startLng: currentPos[1],
-                startLat: currentPos[0],
-                endLng: 80.2184, // Mock destination or use booking coord
-                endLat: 12.9716
+            // fetch optimized route
+            const res = await axios.post('http://localhost:8083/api/fleet/optimize-route', {
+                startLng: currentPos[1], startLat: currentPos[0],
+                endLng: 80.2184, endLat: 12.9716 // Ideally use booking destination lat/lng
             });
 
             if (res.data && res.data.length > 0) {
-                const selectedRoute = res.data[0]; // Path A (Blue)
+                const selectedRoute = res.data[0];
                 setPolyline(selectedRoute.path);
-                setRouteInfo({
-                    duration: selectedRoute.duration,
-                    distance: selectedRoute.distance,
-                    status: selectedRoute.trafficStatus
-                });
+                setRouteInfo({ duration: selectedRoute.duration, distance: selectedRoute.distance, status: selectedRoute.trafficStatus });
                 setCurrentIndex(0);
                 setIsTripping(true);
 
-                // Start movement animation
                 animationRef.current = setInterval(() => {
                     setCurrentIndex(prev => {
                         const next = prev + 1;
@@ -169,227 +343,268 @@ const DriverDashboard = ({ logout }) => {
                             return prev;
                         }
                     });
-                }, 2000);
+                }, 2000); // reduced speed for better sync
             }
-        } catch (e) {
-            console.error("Failed to start trip", e);
-            alert("System Busy: Could not fetch optimized path.");
-        }
+        } catch (e) { alert("System Busy: Could not fetch optimized path."); }
     };
 
     const completeTrip = async () => {
         if (!activeBooking) return;
         try {
-            await axios.put(`http://localhost:8080/api/bookings/${activeBooking.id}/status`, { status: 'COMPLETED' });
-
-            // Success: Clean up
+            await axios.put(`http://localhost:8083/api/bookings/${activeBooking.id}/status`, { status: 'COMPLETED' });
             setIsTripping(false);
             setActiveBooking(null);
             setPolyline([]);
             setCurrentIndex(0);
             if (animationRef.current) clearInterval(animationRef.current);
-
-            // Immediate Refresh as requested
             refreshStats();
-            handleStatusChange('AVAILABLE');
-
+            await axios.put(`http://localhost:8083/api/vehicles/driver/${sessionStorage.getItem('name')}/status`, { status: "Active" });
+            setVehicle(prev => ({ ...prev, status: 'Active' }));
+            setActiveView('dashboard');
             alert("Trip Completed Successfully!");
         } catch (e) { alert("Failed to complete trip."); }
     };
 
-    return (
-        <div className="driver-dashboard min-vh-100 bg-light">
-            {/* Header / Navbar */}
-            <nav className="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm px-4">
-                <span className="navbar-brand fw-bold">🚗 NeuroFleetX | Driver Mission Control</span>
-                <div className="ms-auto d-flex align-items-center">
-                    <div className="dropdown me-3">
-                        <button className={`btn btn-sm btn-light dropdown-toggle fw-bold`} type="button" data-bs-toggle="dropdown">
-                            Status: {vehicle?.status || 'Offline'}
-                        </button>
-                        <ul className="dropdown-menu">
-                            <li><button className="dropdown-item" onClick={() => handleStatusChange('AVAILABLE')}>AVAILABLE</button></li>
-                            <li><button className="dropdown-item" onClick={() => handleStatusChange('MAINTENANCE')}>MAINTENANCE</button></li>
-                        </ul>
-                    </div>
-                    <button className="btn btn-danger btn-sm fw-bold" onClick={logout}>Logout</button>
-                </div>
-            </nav>
+    const reRequestVehicle = async () => {
+        try {
+            const updated = { ...vehicle, status: 'Pending' };
+            await axios.post('http://localhost:8083/api/vehicles', updated);
+            setVehicle(updated);
+            alert("Re-request submitted.");
+        } catch (e) { alert("Failed to re-request."); }
+    };
 
-            <div className="container-fluid p-4">
-                <div className="row g-4">
-                    {/* LEFT SIDE: Telemetry & Map */}
-                    <div className="col-lg-8">
-                        {/* Telemetry Row */}
+    return (
+        <MainLayout title="Driver Console" role="driver" activeView={activeView} onViewChange={setActiveView} logout={logout}>
+            {activeView === 'dashboard' && (
+                <div className="p-4 h-100 overflow-auto">
+                    {vehicle && vehicle.status !== 'Pending' && vehicle.status !== 'Rejected' && (
+                        <Card className={`mb-4 border-0 text-white shadow-sm`} style={{
+                            background: driverStatus === 'Available' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : driverStatus === 'Maintenance' ? 'var(--nfx-warning)' : '#4b4b4b'
+                        }}>
+                            <div className="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 className="mb-1 fw-bold">Driver Status</h5>
+                                    <small className="opacity-75">{driverStatus === 'Available' ? 'Ready to accept jobs' : 'Currently offline/maintenance'}</small>
+                                </div>
+                                <select className="form-select form-select-lg fw-bold shadow-sm" style={{ width: 'auto' }} value={driverStatus} onChange={(e) => handleStatusChange(e.target.value)}>
+                                    <option value="Available">🟢 Available</option>
+                                    <option value="Maintenance">🔧 Maintenance</option>
+                                    <option value="Offline">🔴 Offline</option>
+                                </select>
+                            </div>
+                        </Card>
+                    )}
+
+                    {vehicle && vehicle.status === 'Active' && driverStatus === 'Available' && (
                         <div className="row g-3 mb-4">
                             <div className="col-md-3">
-                                <div className="card kpi-card shadow-sm bg-white p-3 text-center">
-                                    <small className="text-muted fw-bold">LIVE SPEED</small>
-                                    <h3 className="mb-0 text-primary">{vehicle?.speed || 0} <small className="h6 text-muted">km/h</small></h3>
-                                </div>
+                                <Card className="text-center p-3 h-100">
+                                    <div className="text-primary mb-2 display-6">🚗</div>
+                                    <h6 className="text-muted small">LIVE SPEED</h6>
+                                    <h2 className="fw-bold mb-0">{telemetry.speed} <small className="text-muted fs-6">km/h</small></h2>
+                                </Card>
                             </div>
                             <div className="col-md-3">
-                                <div className="card kpi-card shadow-sm bg-white p-3">
-                                    <small className="text-muted fw-bold text-center d-block">BATTERY</small>
-                                    <div className="progress mt-2" style={{ height: '10px' }}>
-                                        <div className="progress-bar bg-success" style={{ width: `${vehicle?.batteryPercent || 85}%` }}></div>
-                                    </div>
-                                    <div className="text-center mt-1 fw-bold text-success">{vehicle?.batteryPercent || 85}%</div>
-                                </div>
+                                <Card className="text-center p-3 h-100">
+                                    <div className="text-success mb-2 display-6">🔋</div>
+                                    <h6 className="text-muted small">BATTERY</h6>
+                                    <h2 className="fw-bold mb-0">{telemetry.battery}%</h2>
+                                </Card>
                             </div>
                             <div className="col-md-3">
-                                <div className="card kpi-card shadow-sm bg-white p-3 text-center">
-                                    <small className="text-muted fw-bold">VEHICLE ID</small>
-                                    <h5 className="mb-0">{vehicle?.numberPlate || 'TN 01 AB 1234'}</h5>
-                                </div>
+                                <Card className="text-center p-3 h-100">
+                                    <div className="text-warning mb-2 display-6">🚙</div>
+                                    <h6 className="text-muted small">VEHICLE ID</h6>
+                                    <h4 className="fw-bold mb-0 text-dark">{vehicle.numberPlate}</h4>
+                                </Card>
                             </div>
                             <div className="col-md-3">
-                                <div className="card kpi-card shadow-sm bg-white p-3 text-center">
-                                    <small className="text-muted fw-bold">ODOMETER</small>
-                                    <h4 className="mb-0">{vehicle?.odometer || 12450} <small className="h6">km</small></h4>
-                                </div>
+                                <Card className="text-center p-3 h-100">
+                                    <div className="text-info mb-2 display-6">📊</div>
+                                    <h6 className="text-muted small">ODOMETER</h6>
+                                    <h2 className="fw-bold mb-0">{telemetry.odometer.toFixed(1)} <small className="text-muted fs-6">km</small></h2>
+                                </Card>
                             </div>
                         </div>
+                    )}
 
-                        {/* Live Map */}
-                        <div className="map-container overflow-hidden">
-                            <MapContainer center={currentPos} zoom={15} style={{ height: '100%', width: '100%' }}>
-                                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                                <Marker position={currentPos} icon={CarIcon}>
-                                    <Popup><b>You are here</b><br />{vehicle?.model}</Popup>
-                                </Marker>
-
-                                {/* Segmented Polyline for Traffic Visualization */}
-                                {polyline.length > 0 && polyline.map((point, i) => {
-                                    if (i === 0) return null;
-                                    const prevPoint = polyline[i - 1];
-                                    // Simulated Congestion: High congestion (Red) vs Smooth (Green)
-                                    // Increased congestion logic for proof: segments 5-15 are red
-                                    const isCongested = (i > 5 && i < 15) || (i % 12 < 2);
-                                    const color = isCongested ? '#ff4d4d' : '#2ecc71';
-                                    return (
-                                        <Polyline
-                                            key={i}
-                                            positions={[prevPoint, point]}
-                                            pathOptions={{ color, weight: 10, opacity: 0.9 }}
-                                        />
-                                    );
-                                })}
-
-                                <RecenterMap coords={currentPos} />
-                            </MapContainer>
-
-                            {/* Floating Live ETA Card */}
-                            {isTripping && routeInfo && (
-                                <div className="floating-eta-card shadow-lg animate__animated animate__fadeInRight">
-                                    <div className="d-flex align-items-center mb-2">
-                                        <div className="pulse-dot me-2"></div>
-                                        <span className="fw-bold text-success small">LIVE MISSION</span>
-                                    </div>
-                                    <div className="h2 fw-bold mb-0">{routeInfo.duration}</div>
-                                    <div className="text-muted small mb-2">{routeInfo.distance} remaining</div>
-                                    <div className="badge bg-danger-subtle text-danger border border-danger">
-                                        Traffic: {routeInfo.status}
-                                    </div>
-                                </div>
-                            )}
-
-                            {isTripping && (
-                                <div className="position-absolute bottom-0 start-50 translate-middle-x mb-4 z-index-1000">
-                                    <h6 className="text-primary fw-bold mb-1">TRIP ACTIVE</h6>
-                                    <button className="btn btn-success btn-sm w-100 fw-bold" onClick={completeTrip}>COMPLETE TRIP</button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* RIGHT SIDE: Jobs & Stats */}
-                    <div className="col-lg-4">
-                        {/* Job Queue */}
-                        <div className="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
-                            <div className="card-header bg-success text-white p-3 d-flex justify-content-between align-items-center">
-                                <h5 className="mb-0">📡 Job Queue</h5>
-                                <button className="btn btn-xs btn-outline-light border-0" onClick={() => checkBookings()}>🔄 Force Check</button>
+                    <h3 className="mb-4 fw-bold">Vehicle Information</h3>
+                    {vehicle && !showRegister ? (
+                        <Card noPadding className="overflow-hidden mb-4">
+                            <div className={`p-3 text-white ${vehicle.status === 'Pending' ? 'bg-warning text-dark' : vehicle.status === 'Active' ? 'bg-success' : 'bg-danger'}`}>
+                                <h5 className="mb-0">{vehicle.status === 'Pending' ? '⚠️ Approval Pending' : vehicle.status === 'Active' ? '✅ Active Vehicle' : '🚫 Access Revoked'}</h5>
                             </div>
-                            <div className="card-body p-4 bg-white">
-                                {error && <div className="alert alert-danger small p-2">{error}</div>}
-                                {activeBooking ? (
-                                    <div className={`job-card p-4 rounded-4 transition-all ${!activeBooking.accepted ? 'bg-primary-subtle border-primary border-start border-5 shadow-sm' : 'bg-light'}`}>
-                                        <div className="d-flex justify-content-between mb-2">
-                                            <span className={`badge ${!activeBooking.accepted ? 'bg-primary animate__animated animate__flash animate__infinite' : 'bg-secondary'}`}>
-                                                {!activeBooking.accepted ? '🚨 INCOMING JOB' : 'WAITING TO START'}
-                                            </span>
-                                            <span className="fw-bold text-success">₹{activeBooking.amount}</span>
-                                        </div>
-                                        <h6 className="fw-bold mb-1">{activeBooking.user?.name || 'Customer'}</h6>
-                                        <p className="text-muted small mb-3">
-                                            {activeBooking.startLocation} → {activeBooking.endLocation}
-                                        </p>
-
-                                        {!activeBooking.accepted ? (
-                                            <button className="btn btn-primary w-100 fw-bold py-2 shadow-sm" onClick={acceptJob}>Accept Mission</button>
-                                        ) : !isTripping ? (
-                                            <div>
-                                                <div className="alert alert-info py-2 small mb-3">Contact: <b>+91 98765 43210</b></div>
-                                                <button className="btn btn-success w-100 fw-bold" onClick={startTrip}>Start Trip</button>
+                            <div className="card-body p-4">
+                                <div className="row">
+                                    <div className="col-md-6">
+                                        <h4 className="fw-bold">{vehicle.model}</h4>
+                                        <p className="text-muted">{vehicle.numberPlate}</p>
+                                        <span className="badge bg-secondary me-2">{vehicle.type}</span>
+                                        <span className="badge bg-secondary">{vehicle.seats} Seats</span>
+                                    </div>
+                                    <div className="col-md-6 text-center">
+                                        <img src={vehicle.vehiclePhotoUrl || "https://cdni.iconscout.com/illustration/premium/thumb/electric-car-3454848-2886733.png"} className="img-fluid" width="200" alt="Car" />
+                                        {vehicle.status !== 'Pending' && (
+                                            <div className="mt-3">
+                                                <Button variant="outline" className="btn-sm" onClick={() => setShowRegister(true)}>Change Vehicle</Button>
                                             </div>
-                                        ) : (
-                                            <button className="btn btn-outline-success w-100 fw-bold" disabled>Trip Progressing...</button>
                                         )}
                                     </div>
+                                </div>
+                            </div>
+                        </Card>
+                    ) : (
+                        <Card>
+                            <div className="d-flex justify-content-between mb-3">
+                                <h5 className="fw-bold">Register Vehicle</h5>
+                                {showRegister && <Button variant="ghost" onClick={() => setShowRegister(false)}>Cancel</Button>}
+                            </div>
+                            <form onSubmit={registerVehicle}>
+                                <div className="row g-3">
+                                    <div className="col-md-6"><label>Model</label><input className="form-control" name="model" required /></div>
+                                    <div className="col-md-6"><label>Plate</label><input className="form-control" name="plate" required /></div>
+                                    <div className="col-md-6"><label>Photos</label><input className="form-control" name="carPhotos" type="file" multiple /></div>
+                                    <div className="col-md-3">
+                                        <label>Type</label>
+                                        <select className="form-select" name="type"><option>SUV</option><option>Sedan</option></select>
+                                    </div>
+                                    <div className="col-md-3">
+                                        <label>Seats</label>
+                                        <select className="form-select" name="seats"><option>4</option><option>6</option></select>
+                                    </div>
+                                </div>
+                                <Button className="w-100 mt-4" type="submit">Submit for Approval</Button>
+                            </form>
+                        </Card>
+                    )}
+                </div>
+            )}
+
+            {activeView === 'post-trip' && (
+                <div className="p-4 h-100 overflow-auto">
+                    <TripPostingComponent vehicle={vehicle} onTripPosted={() => { fetchBaseData(); setActiveView('dashboard'); }} />
+                </div>
+            )}
+
+            {activeView === 'mission' && (
+                <div className="position-relative w-100 h-100">
+                    {/* Mission Control Sub-Tabs */}
+                    <div className="position-absolute top-0 start-0 w-100 p-3 d-flex gap-2" style={{ zIndex: 1001, pointerEvents: 'none' }}>
+                        <div className="d-flex gap-2 w-100 justify-content-center" style={{ pointerEvents: 'auto' }}>
+                            <Button variant={missionTab === 'requests' ? 'primary' : 'light'} onClick={() => setMissionTab('requests')} className="shadow-sm">
+                                🔔 Job Requests {jobRequests.length > 0 && <span className="badge bg-danger ms-1">{jobRequests.length}</span>}
+                            </Button>
+                            <Button variant={missionTab === 'current' ? 'success' : 'light'} onClick={() => setMissionTab('current')} className="shadow-sm">
+                                🚀 My Job {activeBooking && <span className="badge bg-white text-success ms-1">Active</span>}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {missionTab === 'requests' && (
+                        <div className="d-flex align-items-center justify-content-center h-100 bg-light">
+                            <div className="container p-5 overflow-auto" style={{ maxHeight: '80vh', maxWidth: '600px' }}>
+                                <h4 className="fw-bold mb-4">Job Requests</h4>
+                                {jobRequests.length === 0 ? (
+                                    <div className="text-center text-muted">
+                                        <div className="display-4 mb-3">📭</div>
+                                        <p>No new job requests pending.</p>
+                                    </div>
                                 ) : (
-                                    <div className="text-center py-5">
-                                        <div className="spinner-grow text-success mb-3"></div>
-                                        <p className="text-muted fw-bold">Scanning for assignments...</p>
+                                    <div className="d-flex flex-column gap-3">
+                                        {jobRequests.map(job => (
+                                            <Card key={job.id} className="border-0 shadow-lg animate__animated animate__fadeInUp">
+                                                <div className="d-flex justify-content-between align-items-center mb-2">
+                                                    <h5 className="fw-bold text-primary mb-0">Ride Request #{job.id}</h5>
+                                                    <span className="badge bg-warning text-dark">PENDING</span>
+                                                </div>
+                                                <div className="d-flex justify-content-between mb-3 border-bottom pb-3">
+                                                    <div>
+                                                        <small className="text-muted d-block">PICKUP</small>
+                                                        <strong>{job.startLocation}</strong>
+                                                    </div>
+                                                    <div className="text-end">
+                                                        <small className="text-muted d-block">DESTINATION</small>
+                                                        <strong>{job.endLocation}</strong>
+                                                    </div>
+                                                </div>
+                                                <div className="mb-3 bg-light p-2 rounded">
+                                                    <div className="d-flex align-items-center mb-1">
+                                                        <i className="bi bi-person-fill me-2"></i>
+                                                        <span>{job.userName || 'Customer'}</span>
+                                                    </div>
+                                                    <div className="d-flex align-items-center">
+                                                        <i className="bi bi-calendar-event me-2"></i>
+                                                        <span className="small">{new Date(job.scheduledStartTime).toLocaleString()}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="d-flex gap-2">
+                                                    <Button variant="success" className="w-50" onClick={() => acceptJob(job)} disabled={!!activeBooking}>
+                                                        {activeBooking ? 'Complete Active Job First' : 'Accept Ride'}
+                                                    </Button>
+                                                    <Button variant="danger" className="w-50" onClick={() => rejectJob(job)}>Decline</Button>
+                                                </div>
+                                            </Card>
+                                        ))}
                                     </div>
                                 )}
                             </div>
                         </div>
+                    )}
 
-                        {/* Revenue Tracker */}
-                        <div className="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden">
-                            <div className="card-header bg-info text-white p-3">
-                                <h5 className="mb-0">💰 Revenue Tracker</h5>
+                    {missionTab === 'current' && (
+                        (!vehicle || vehicle.status === 'Pending') ? (
+                            <div className="d-flex align-items-center justify-content-center h-100 flex-column text-muted">
+                                <div className="display-1">🔒</div>
+                                <h3>Mission Control Locked</h3>
+                                <p>Waiting for vehicle approval.</p>
                             </div>
-                            <div className="card-body p-4 d-flex justify-content-around text-center">
-                                <div>
-                                    <small className="text-muted fw-bold d-block">TODAY'S EARNINGS</small>
-                                    <h3 className="text-primary mt-1">₹{earnings.totalEarnings}</h3>
+                        ) : (
+                            <>
+                                <div className="map-container w-100 h-100">
+                                    <MapContainer center={currentPos} zoom={15} style={{ height: '100%', width: '100%' }}>
+                                        <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+                                        <Marker position={currentPos} icon={CarIcon} />
+                                        {polyline.length > 0 && <Polyline positions={polyline} color="blue" />}
+                                        <RecenterMap coords={currentPos} />
+                                    </MapContainer>
                                 </div>
-                                <div className="vr mx-3"></div>
-                                <div>
-                                    <small className="text-muted fw-bold d-block">TRIPS</small>
-                                    <h3 className="mt-1">{earnings.completedTrips}</h3>
-                                </div>
-                            </div>
-                        </div>
 
-                        {/* Feedback Log */}
-                        <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
-                            <div className="card-header bg-warning text-dark p-3">
-                                <h5 className="mb-0">⭐ Feedback Log</h5>
-                            </div>
-                            <div className="card-body p-3 overflow-auto" style={{ maxHeight: '300px' }}>
-                                {reviews.length === 0 ? (
-                                    <div className="text-center text-muted p-4 small">No feedback yet.</div>
-                                ) : (
-                                    reviews.map(rev => (
-                                        <div key={rev.id} className="review-card p-2 mb-2">
-                                            <div className="d-flex justify-content-between">
-                                                <span className="text-warning">{'★'.repeat(rev.rating)}</span>
-                                                <small className="text-muted small">ID: {rev.id}</small>
+                                {activeBooking ? (
+                                    <div className="position-absolute bottom-0 start-0 w-100 p-3" style={{ zIndex: 1000 }}>
+                                        <Card className="shadow-lg animate__animated animate__slideInUp">
+                                            <div className="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <h5 className="fw-bold mb-0">Active Mission: {activeBooking.endLocation}</h5>
+                                                    <small className="text-muted">Passenger: {activeBooking.userName}</small>
+                                                </div>
+                                                <div className="d-flex gap-2">
+                                                    {!isTripping ? (
+                                                        <Button variant="success" onClick={startTrip} disabled={isTripping}>Start Trip</Button>
+                                                    ) : (
+                                                        <Button variant="danger" onClick={completeTrip}>Complete Trip</Button>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <p className="small text-dark mb-0 mt-1 italic">"{rev.comment}"</p>
-                                        </div>
-                                    ))
+                                        </Card>
+                                    </div>
+                                ) : (
+                                    <div className="position-absolute bottom-0 start-0 w-100 p-3" style={{ zIndex: 1000 }}>
+                                        <Card className="shadow-sm text-center p-3 opacity-75">
+                                            <p className="mb-0 text-muted">No active job. Check <b>Job Requests</b> tab.</p>
+                                        </Card>
+                                    </div>
                                 )}
-                            </div>
-                        </div>
-                    </div>
+                            </>
+                        )
+                    )}
                 </div>
-            </div>
-        </div>
+            )}
+
+            {activeView === 'profile' && <div className="p-4"><ProfileSection userId={sessionStorage.getItem('userId')} /></div>}
+        </MainLayout>
     );
 };
+
 
 export default DriverDashboard;

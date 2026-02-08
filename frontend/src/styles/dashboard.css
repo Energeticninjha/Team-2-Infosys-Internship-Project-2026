@@ -1,0 +1,417 @@
+/* NeuroFleetX Dashboard Design System */
+
+/* Color Palette */
+:root {
+    /* Primary Brand Colors */
+    --nfx-primary: #0d6efd;
+    --nfx-primary-dark: #0b5ed7;
+    --nfx-primary-light: #6ea8fe;
+
+    /* Role-Specific Accent Colors */
+    --nfx-admin: #dc3545;
+    --nfx-manager: #ffc107;
+    --nfx-driver: #198754;
+    --nfx-customer: #0dcaf0;
+
+    /* Neutral Colors */
+    --nfx-dark: #212529;
+    --nfx-gray: #6c757d;
+    --nfx-light: #f8f9fa;
+    --nfx-white: #ffffff;
+
+    /* Status Colors */
+    --nfx-success: #198754;
+    --nfx-warning: #ffc107;
+    --nfx-danger: #dc3545;
+    --nfx-info: #0dcaf0;
+
+    /* Spacing */
+    --nfx-spacing-xs: 0.5rem;
+    --nfx-spacing-sm: 1rem;
+    --nfx-spacing-md: 1.5rem;
+    --nfx-spacing-lg: 2rem;
+    --nfx-spacing-xl: 3rem;
+
+    /* Border Radius */
+    --nfx-radius-sm: 0.375rem;
+    --nfx-radius-md: 0.75rem;
+    --nfx-radius-lg: 1rem;
+    --nfx-radius-xl: 1.5rem;
+
+    /* Shadows */
+    --nfx-shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    --nfx-shadow-md: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    --nfx-shadow-lg: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+}
+
+/* Dashboard Layout */
+.nfx-dashboard {
+    min-height: 100vh;
+    display: flex;
+    background-color: var(--bg-app);
+    color: var(--text-main);
+}
+
+/* Navbar - Standardized */
+.nfx-navbar {
+    background: linear-gradient(135deg, var(--nfx-primary) 0%, var(--nfx-primary-dark) 100%);
+    box-shadow: var(--nfx-shadow-md);
+    padding: 1rem 1.5rem;
+}
+
+.nfx-navbar-brand {
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: var(--nfx-white) !important;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.nfx-navbar-role {
+    font-size: 0.875rem;
+    opacity: 0.9;
+    margin-left: 0.5rem;
+}
+
+/* Sidebar - Standardized */
+.nfx-sidebar {
+    width: 260px;
+    background-color: var(--bg-panel);
+    color: var(--text-main);
+    padding: var(--nfx-spacing-md);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--nfx-shadow-lg);
+    z-index: 1000;
+    min-height: 100vh;
+    border-right: 1px solid var(--border-subtle);
+}
+
+.nfx-sidebar-header {
+    text-align: center;
+    padding: var(--nfx-spacing-md);
+    background: linear-gradient(135deg, var(--nfx-primary) 0%, var(--nfx-primary-dark) 100%);
+    border-radius: var(--nfx-radius-lg);
+    margin-bottom: var(--nfx-spacing-lg);
+    box-shadow: var(--nfx-shadow-sm);
+}
+
+.nfx-sidebar-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+    color: var(--nfx-white);
+}
+
+.nfx-sidebar-subtitle {
+    font-size: 0.875rem;
+    opacity: 0.8;
+    color: var(--nfx-white);
+}
+
+.nfx-sidebar-nav {
+    flex: 1;
+}
+
+.nfx-sidebar-nav-item {
+    margin-bottom: var(--nfx-spacing-xs);
+}
+
+
+.nfx-sidebar-nav-link {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-radius: var(--nfx-radius-md);
+    transition: all 0.3s ease;
+    background: transparent;
+    border: none;
+    text-align: left;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.nfx-sidebar-nav-link:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-main);
+    transform: translateX(4px);
+}
+
+.nfx-sidebar-nav-link.active {
+    background: linear-gradient(135deg, var(--nfx-primary) 0%, var(--nfx-primary-dark) 100%);
+    font-weight: 600;
+    color: white !important;
+    box-shadow: var(--nfx-shadow-sm);
+}
+
+/* ... skipped sidebar user ... */
+
+.nfx-sidebar-user {
+    display: flex;
+    align-items: center;
+    padding: var(--nfx-spacing-sm);
+    background-color: var(--bg-hover);
+    border-radius: var(--nfx-radius-md);
+    margin-bottom: var(--nfx-spacing-sm);
+}
+
+/* Main Content Area */
+.nfx-main-content {
+    flex: 1;
+    overflow-y: auto;
+    height: 100vh;
+    background-color: var(--bg-app);
+}
+
+.nfx-page-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0;
+}
+
+/* Cards - Standardized */
+.nfx-card {
+    background-color: var(--bg-panel);
+    border-radius: var(--nfx-radius-lg);
+    box-shadow: var(--nfx-shadow-sm);
+    border: 1px solid var(--border-subtle);
+    transition: all 0.3s ease;
+}
+
+.nfx-card-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border-subtle);
+    background-color: transparent;
+}
+
+.nfx-card-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0;
+    color: var(--text-main);
+}
+
+/* KPI Cards */
+.nfx-kpi-card {
+    background: var(--bg-panel);
+    border-radius: var(--nfx-radius-lg);
+    padding: 1.5rem;
+    box-shadow: var(--nfx-shadow-sm);
+    border: 1px solid var(--border-subtle);
+    text-align: center;
+    transition: all 0.3s ease;
+    height: 100%;
+}
+
+.nfx-kpi-value {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--text-main);
+}
+
+.nfx-kpi-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+.nfx-kpi-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+    opacity: 0.8;
+}
+
+/* Buttons - Standardized */
+.nfx-btn {
+    padding: 0.625rem 1.25rem;
+    border-radius: var(--nfx-radius-md);
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+}
+
+.nfx-btn-primary {
+    background: linear-gradient(135deg, var(--nfx-primary) 0%, var(--nfx-primary-dark) 100%);
+    color: var(--nfx-white);
+}
+
+.nfx-btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--nfx-shadow-md);
+}
+
+.nfx-btn-logout {
+    background-color: var(--nfx-danger);
+    color: var(--nfx-white);
+    width: 100%;
+}
+
+.nfx-btn-logout:hover {
+    background-color: #bb2d3b;
+}
+
+/* Tables - Standardized */
+.nfx-table {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+.nfx-table thead {
+    background-color: var(--nfx-light);
+}
+
+.nfx-table th {
+    padding: 1rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--nfx-gray);
+    border-bottom: 2px solid rgba(0, 0, 0, 0.05);
+}
+
+.nfx-table td {
+    padding: 1rem 1.25rem;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.nfx-table tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.02);
+}
+
+/* Badges - Standardized */
+.nfx-badge {
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--nfx-radius-sm);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Alerts - Standardized */
+.nfx-alert {
+    padding: 1rem 1.25rem;
+    border-radius: var(--nfx-radius-md);
+    border: none;
+    box-shadow: var(--nfx-shadow-sm);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.nfx-fade-in {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .nfx-sidebar {
+        width: 100%;
+        min-height: auto;
+    }
+
+    .nfx-main-content {
+        height: auto;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+}
+
+/* Clean Highlight Helper */
+.hover-bg-danger-subtle:hover {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+}
+
+.hover-bg-light:hover {
+    background-color: var(--bg-hover) !important;
+}
+
+/* Glass Panel helper */
+.glass-panel {
+    background: var(--bg-panel-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-subtle);
+}
+
+/* Modal Backdrop */
+.modal-backdrop-glass {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+/* --- Polish Utilities (Added for Welcome/Auth Pages) --- */
+
+.hover-elevate {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hover-elevate:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2) !important;
+}
+
+.text-transparent {
+    color: transparent;
+}
+
+.bg-clip-text {
+    -webkit-background-clip: text;
+    background-clip: text;
+}
+
+.backdrop-blur {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.blur-3xl {
+    filter: blur(64px);
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.tracking-tight {
+    letter-spacing: -0.025em;
+}
+
+.leading-tight {
+    line-height: 1.1;
+}
+
+.focus-ring-primary:focus {
+    box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.25);
+    border-color: #0d6efd;
+}
+
+/* Gradients for Auth */
+.bg-gradient-to-r {
+    background-image: linear-gradient(to right, var(--tw-gradient-stops));
+}
