@@ -36,6 +36,12 @@ public class VehicleController {
     @Autowired
     private com.neurofleetx.repo.UserRepository userRepo;
 
+    @Autowired
+    private com.neurofleetx.service.TelemetryService telemetryService;
+
+    @Autowired
+    private com.neurofleetx.repo.AlertRepository alertRepo;
+
     @GetMapping
     public List<Vehicle> getAllVehicles() {
         return vehicleRepo.findAll();
@@ -227,5 +233,105 @@ public class VehicleController {
     public ResponseEntity<String> resetVehicleHealth(@PathVariable Long id) {
         maintenanceService.resetHealth(id);
         return ResponseEntity.ok("Vehicle health reset successfully");
+    }
+
+    @GetMapping("/telemetry/export")
+    public ResponseEntity<String> exportTelemetryCSV() {
+        List<Vehicle> vehicles = vehicleRepo.findAll();
+        StringBuilder csv = new StringBuilder();
+
+        // CSV Header
+        csv.append(
+                "Vehicle ID,Model,Number Plate,Driver Name,Status,Speed (km/h),Battery %,Fuel %,Odometer (km),Engine Health,Tire Wear,Battery Health,Tire Pressure,Latitude,Longitude,Last Update\n");
+
+        // CSV Data
+        for (Vehicle v : vehicles) {
+            csv.append(v.getId()).append(",")
+                    .append(v.getModel() != null ? v.getModel() : "N/A").append(",")
+                    .append(v.getNumberPlate() != null ? v.getNumberPlate() : "N/A").append(",")
+                    .append(v.getDriverName() != null ? v.getDriverName() : "N/A").append(",")
+                    .append(v.getStatus() != null ? v.getStatus() : "N/A").append(",")
+                    .append(v.getSpeed() != null ? v.getSpeed() : 0).append(",")
+                    .append(v.getBatteryPercent() != null ? v.getBatteryPercent() : 0).append(",")
+                    .append(v.getFuelPercent() != null ? v.getFuelPercent() : 0).append(",")
+                    .append(v.getOdometer() != null ? v.getOdometer() : 0).append(",")
+                    .append(v.getEngineHealth() != null ? v.getEngineHealth() : 100).append(",")
+                    .append(v.getTireWear() != null ? v.getTireWear() : 0).append(",")
+                    .append(v.getBatteryHealth() != null ? v.getBatteryHealth() : 100).append(",")
+                    .append(v.getTirePressure() != null ? v.getTirePressure() : 32).append(",")
+                    .append(v.getLatitude() != null ? v.getLatitude() : 0).append(",")
+                    .append(v.getLongitude() != null ? v.getLongitude() : 0).append(",")
+                    .append(v.getLastUpdate() != null ? v.getLastUpdate() : "N/A").append("\n");
+        }
+
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=vehicle_telemetry.csv")
+                .header("Content-Type", "text/csv")
+                .body(csv.toString());
+    }
+
+    @GetMapping("/{id}/health-score")
+    public ResponseEntity<Map<String, Object>> getHealthScore(@PathVariable Long id) {
+        return vehicleRepo.findById(id).map(v -> {
+            // Calculate overall health score (0-100)
+            double engineScore = v.getEngineHealth() != null ? v.getEngineHealth() : 100;
+            double batteryScore = v.getBatteryHealth() != null ? v.getBatteryHealth() : 100;
+            double tireScore = v.getTireWear() != null ? (100 - v.getTireWear()) : 100;
+
+            double overallScore = (engineScore + batteryScore + tireScore) / 3.0;
+
+            Map<String, Object> result = new java.util.HashMap<>();
+            result.put("vehicleId", v.getId());
+            result.put("overallHealthScore", Math.round(overallScore * 10) / 10.0);
+            result.put("engineHealth", engineScore);
+            result.put("batteryHealth", batteryScore);
+            result.put("tireHealth", tireScore);
+            result.put("status", overallScore >= 70 ? "Good" : overallScore >= 40 ? "Fair" : "Critical");
+
+            return ResponseEntity.ok(result);
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{id}/telemetry/history")
+    public ResponseEntity<List<com.neurofleetx.model.TelemetryHistory>> getTelemetryHistory(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "24") int hours) {
+        List<com.neurofleetx.model.TelemetryHistory> history = telemetryService.getVehicleHistory(id, hours);
+        return ResponseEntity.ok(history);
+    }
+
+    @GetMapping("/alerts")
+    public ResponseEntity<List<com.neurofleetx.model.Alert>> getAllAlerts() {
+        return ResponseEntity.ok(alertRepo.findByStatusOrderByCreatedAtDesc("ACTIVE"));
+    }
+
+    @GetMapping("/alerts/critical")
+    public ResponseEntity<List<com.neurofleetx.model.Alert>> getCriticalAlerts() {
+        return ResponseEntity.ok(alertRepo.findBySeverityAndStatusOrderByCreatedAtDesc("CRITICAL", "ACTIVE"));
+    }
+
+    @PutMapping("/alerts/{id}/acknowledge")
+    public ResponseEntity<String> acknowledgeAlert(@PathVariable Long id) {
+        return alertRepo.findById(id).map(alert -> {
+            alert.setStatus("ACKNOWLEDGED");
+            alert.setAcknowledgedAt(java.time.LocalDateTime.now());
+            alertRepo.save(alert);
+            return ResponseEntity.ok("Alert acknowledged");
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/alerts/{id}/resolve")
+    public ResponseEntity<String> resolveAlert(@PathVariable Long id) {
+        return alertRepo.findById(id).map(alert -> {
+            alert.setStatus("RESOLVED");
+            alert.setResolvedAt(java.time.LocalDateTime.now());
+            alertRepo.save(alert);
+            return ResponseEntity.ok("Alert resolved");
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/utilization")
+    public ResponseEntity<Map<String, Object>> getFleetUtilization() {
+        return ResponseEntity.ok(telemetryService.getFleetUtilization());
     }
 }

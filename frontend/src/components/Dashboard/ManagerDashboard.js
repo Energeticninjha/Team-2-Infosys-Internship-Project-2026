@@ -42,6 +42,15 @@ const ManagerDashboard = ({ logout }) => {
     const [selectedVehicle, setSelectedVehicle] = useState(null);
     const [selectedDocs, setSelectedDocs] = useState(null);
 
+    // New states for enhancements
+    const [searchQuery, setSearchQuery] = useState('');
+    const [vehicleHealthScores, setVehicleHealthScores] = useState({});
+    const [alerts, setAlerts] = useState([]);
+    const [utilizationMetrics, setUtilizationMetrics] = useState({});
+    const [filterType, setFilterType] = useState('all');
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [filterHealth, setFilterHealth] = useState('all');
+
     const managerName = sessionStorage.getItem('name') || 'Manager';
 
     const updateVehicleStatus = async (id, status, docStatus) => {
@@ -63,19 +72,91 @@ const ManagerDashboard = ({ logout }) => {
         } catch (error) { alert("Failed to verify documents"); }
     }
 
+    const exportTelemetryCSV = async () => {
+        try {
+            const response = await axios.get('http://localhost:8083/api/vehicles/telemetry/export', {
+                responseType: 'blob'
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `vehicle_telemetry_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            alert('Telemetry data exported successfully!');
+        } catch (error) {
+            console.error('Export failed:', error);
+            alert('Failed to export telemetry data');
+        }
+    };
+
+    const filterVehicles = (vehiclesList) => {
+        let filtered = vehiclesList;
+
+        // Search filter
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            filtered = filtered.filter(v =>
+                (v.driverName && v.driverName.toLowerCase().includes(query)) ||
+                (v.model && v.model.toLowerCase().includes(query)) ||
+                (v.numberPlate && v.numberPlate.toLowerCase().includes(query)) ||
+                (v.status && v.status.toLowerCase().includes(query))
+            );
+        }
+
+        // Type filter
+        if (filterType !== 'all') {
+            filtered = filtered.filter(v => v.type && v.type.toLowerCase() === filterType.toLowerCase());
+        }
+
+        // Status filter
+        if (filterStatus !== 'all') {
+            filtered = filtered.filter(v => v.status && v.status.toLowerCase() === filterStatus.toLowerCase());
+        }
+
+        // Health filter
+        if (filterHealth !== 'all') {
+            filtered = filtered.filter(v => {
+                const healthScore = vehicleHealthScores[v.id];
+                if (!healthScore) return false;
+
+                if (filterHealth === 'good') return healthScore.overallHealthScore >= 70;
+                if (filterHealth === 'fair') return healthScore.overallHealthScore >= 40 && healthScore.overallHealthScore < 70;
+                if (filterHealth === 'critical') return healthScore.overallHealthScore < 40;
+                return true;
+            });
+        }
+
+        return filtered;
+    };
+
     useEffect(() => {
         const fetchManagerData = async () => {
             const token = sessionStorage.getItem('token');
             const config = { headers: { Authorization: `Bearer ${token}` } };
             try {
                 const vRes = await axios.get('http://localhost:8083/api/vehicles', config);
-                setVehicles(vRes.data || []);
+                const vehiclesList = vRes.data || [];
+                setVehicles(vehiclesList);
+
+                // Fetch health scores for all vehicles
+                const healthScores = {};
+                for (const vehicle of vehiclesList) {
+                    try {
+                        const healthRes = await axios.get(`http://localhost:8083/api/vehicles/${vehicle.id}/health-score`, config);
+                        healthScores[vehicle.id] = healthRes.data;
+                    } catch (e) {
+                        // Default health score if endpoint fails
+                        healthScores[vehicle.id] = { overallHealthScore: 0, status: 'Unknown' };
+                    }
+                }
+                setVehicleHealthScores(healthScores);
 
                 const dRes = await axios.get('http://localhost:8083/api/manager/drivers/online', config);
                 const onlineDriversCount = (dRes.data || []).length;
                 setOnlineDriversList(dRes.data || []);
 
-                const vehiclesList = vRes.data || [];
                 const activeCount = vehiclesList.filter(v =>
                     ['active', 'busy', 'enroute', 'on_trip'].includes(v.status?.toLowerCase())
                 ).length;
@@ -92,6 +173,14 @@ const ManagerDashboard = ({ logout }) => {
                 const allBookings = bRes.data || [];
                 setTrips(allBookings.filter(b => b.status === 'ENROUTE' || b.status === 'PICKED_UP'));
                 setPendingBookings(allBookings.filter(b => b.status === 'PENDING' || !b.vehicle));
+
+                // Fetch alerts
+                const alertsRes = await axios.get('http://localhost:8083/api/vehicles/alerts', config);
+                setAlerts(alertsRes.data || []);
+
+                // Fetch utilization metrics
+                const utilRes = await axios.get('http://localhost:8083/api/vehicles/utilization', config);
+                setUtilizationMetrics(utilRes.data || {});
 
             } catch (error) { console.error("Error fetching data", error); }
         };
@@ -120,6 +209,107 @@ const ManagerDashboard = ({ logout }) => {
 
                 {activeView === 'tracking' && (
                     <div className="animate-fade-in">
+                        {/* Search and Export Controls */}
+                        <div className="d-flex gap-3 mb-4 align-items-center flex-wrap">
+                            <div className="flex-grow-1">
+                                <input
+                                    type="text"
+                                    className="form-control form-control-lg"
+                                    placeholder="🔍 Search vehicles by driver, model, plate, or status..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    style={{ maxWidth: '600px' }}
+                                />
+                            </div>
+
+                            {/* Advanced Filters */}
+                            <select className="form-select" value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ width: 'auto' }}>
+                                <option value="all">All Types</option>
+                                <option value="suv">SUV</option>
+                                <option value="sedan">Sedan</option>
+                            </select>
+
+                            <select className="form-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ width: 'auto' }}>
+                                <option value="all">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="maintenance">Maintenance</option>
+                            </select>
+
+                            <select className="form-select" value={filterHealth} onChange={(e) => setFilterHealth(e.target.value)} style={{ width: 'auto' }}>
+                                <option value="all">All Health</option>
+                                <option value="good">Good (70%+)</option>
+                                <option value="fair">Fair (40-69%)</option>
+                                <option value="critical">Critical (&lt;40%)</option>
+                            </select>
+
+                            <Button variant="primary" onClick={exportTelemetryCSV}>
+                                📊 Export CSV
+                            </Button>
+                        </div>
+
+                        {/* Alerts Panel */}
+                        {alerts.length > 0 && (
+                            <Card className="mb-4 border-danger">
+                                <div className="p-3 bg-danger bg-opacity-10">
+                                    <h5 className="mb-0 fw-bold text-danger">🚨 Active Alerts ({alerts.length})</h5>
+                                </div>
+                                <div className="card-body p-3">
+                                    <div className="row g-2">
+                                        {alerts.slice(0, 5).map(alert => (
+                                            <div key={alert.id} className="col-12">
+                                                <div className={`alert alert-${alert.severity === 'CRITICAL' ? 'danger' : 'warning'} mb-0 py-2`}>
+                                                    <div className="d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <strong>{alert.numberPlate}</strong> - {alert.message}
+                                                            <small className="text-muted ms-2">
+                                                                {new Date(alert.createdAt).toLocaleString()}
+                                                            </small>
+                                                        </div>
+                                                        <button
+                                                            className="btn btn-sm btn-outline-secondary"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    await axios.put(`http://localhost:8083/api/vehicles/alerts/${alert.id}/acknowledge`);
+                                                                    setAlerts(alerts.filter(a => a.id !== alert.id));
+                                                                } catch (e) { }
+                                                            }}
+                                                        >
+                                                            Acknowledge
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </Card>
+                        )}
+
+                        {/* Utilization Metrics */}
+                        {utilizationMetrics.totalVehicles && (
+                            <div className="row mb-4 g-3">
+                                <div className="col-md-2">
+                                    <Card className="p-3 text-center">
+                                        <h6 className="text-muted mb-1 small">Utilization</h6>
+                                        <h3 className="fw-bold mb-0 text-primary">{utilizationMetrics.utilizationRate}%</h3>
+                                    </Card>
+                                </div>
+                                <div className="col-md-2">
+                                    <Card className="p-3 text-center">
+                                        <h6 className="text-muted mb-1 small">Avg Health</h6>
+                                        <h3 className="fw-bold mb-0 text-success">{utilizationMetrics.avgFleetHealth}%</h3>
+                                    </Card>
+                                </div>
+                                <div className="col-md-2">
+                                    <Card className="p-3 text-center">
+                                        <h6 className="text-muted mb-1 small">Avg Odometer</h6>
+                                        <h3 className="fw-bold mb-0 text-info">{utilizationMetrics.avgOdometer} km</h3>
+                                    </Card>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="row mb-4 g-3">
                             <div className="col-md-3">
                                 <Card className="p-3">
@@ -148,23 +338,42 @@ const ManagerDashboard = ({ logout }) => {
                                         <h5 className="mb-0 fw-bold text-success">Active Vehicles</h5>
                                     </div>
                                     <div className="list-group list-group-flush overflow-auto" style={{ maxHeight: '600px' }}>
-                                        {vehicles.filter(v => v.status === 'Active' || v.status === 'BUSY').length > 0 ? (
-                                            vehicles.filter(v => v.status === 'Active' || v.status === 'BUSY').map(v => (
-                                                <div key={v.id} className="list-group-item p-3 border-0 border-bottom bg-transparent" style={{ color: 'var(--text-main)' }}>
-                                                    <div className="d-flex align-items-center">
-                                                        <div className="bg-light rounded-circle p-2 me-3">🚛</div>
-                                                        <div>
-                                                            <h6 className="mb-0 fw-bold">{v.model}</h6>
-                                                            <small className="text-muted">{v.numberPlate}</small>
-                                                            <div className="mt-1">
-                                                                <span className={`badge ${v.status === 'BUSY' ? 'bg-warning text-dark' : 'bg-success'} me-2`}>{v.status}</span>
+                                        {filterVehicles(vehicles.filter(v => v.status === 'Active' || v.status === 'BUSY')).length > 0 ? (
+                                            filterVehicles(vehicles.filter(v => v.status === 'Active' || v.status === 'BUSY')).map(v => {
+                                                const healthScore = vehicleHealthScores[v.id];
+                                                const healthBadgeColor = healthScore?.overallHealthScore >= 70 ? 'success' :
+                                                    healthScore?.overallHealthScore >= 40 ? 'warning' : 'danger';
+                                                return (
+                                                    <div key={v.id} className="list-group-item p-3 border-0 border-bottom bg-transparent" style={{ color: 'var(--text-main)' }}>
+                                                        <div className="d-flex align-items-center justify-content-between">
+                                                            <div className="d-flex align-items-center flex-grow-1">
+                                                                <div className="bg-light rounded-circle p-2 me-3">🚛</div>
+                                                                <div>
+                                                                    <h6 className="mb-0 fw-bold">{v.model}</h6>
+                                                                    <small className="text-muted">{v.numberPlate}</small>
+                                                                    <div className="mt-1">
+                                                                        <span className={`badge ${v.status === 'BUSY' ? 'bg-warning text-dark' : 'bg-success'} me-2`}>{v.status}</span>
+                                                                        {healthScore && (
+                                                                            <span className={`badge bg-${healthBadgeColor} me-2`} title="Overall Health Score">
+                                                                                ❤️ {healthScore.overallHealthScore.toFixed(0)}%
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    {v.lastUpdate && (
+                                                                        <small className="text-muted d-block mt-1" style={{ fontSize: '0.7rem' }}>
+                                                                            Updated: {new Date(v.lastUpdate).toLocaleTimeString()}
+                                                                        </small>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            ))
+                                                );
+                                            })
                                         ) : (
-                                            <div className="p-4 text-center text-muted">No active vehicles found.</div>
+                                            <div className="p-4 text-center text-muted">
+                                                {searchQuery ? 'No vehicles match your search.' : 'No active vehicles found.'}
+                                            </div>
                                         )}
                                     </div>
                                 </Card>

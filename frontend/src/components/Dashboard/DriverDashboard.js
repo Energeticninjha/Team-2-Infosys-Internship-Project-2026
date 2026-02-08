@@ -66,6 +66,8 @@ const DriverDashboard = ({ logout }) => {
     // Real-Time Telemetry State
     const [driverStatus, setDriverStatus] = useState('Available');
     const [telemetry, setTelemetry] = useState({ speed: 0, battery: 100, odometer: 0, fuelPercent: 100 });
+    const [lastTelemetryUpdate, setLastTelemetryUpdate] = useState(new Date());
+    const [showBatteryAlert, setShowBatteryAlert] = useState(false);
     const telemetryInterval = useRef(null);
 
     const fetchBaseData = async () => {
@@ -122,9 +124,19 @@ const DriverDashboard = ({ logout }) => {
                     fuelPercent: prev.fuelPercent
                 };
             });
+            setLastTelemetryUpdate(new Date());
         }, 1000);
         return () => { if (telemetryInterval.current) clearInterval(telemetryInterval.current); };
     }, [vehicle, isTripping, driverStatus]);
+
+    // Battery Alert Effect
+    useEffect(() => {
+        if (telemetry.battery < 20 && telemetry.battery > 0 && !showBatteryAlert) {
+            setShowBatteryAlert(true);
+        } else if (telemetry.battery >= 20 && showBatteryAlert) {
+            setShowBatteryAlert(false);
+        }
+    }, [telemetry.battery]);
 
     useEffect(() => {
         fetchBaseData();
@@ -415,38 +427,57 @@ const DriverDashboard = ({ logout }) => {
                     )}
 
                     {vehicle && vehicle.status === 'Active' && driverStatus === 'Available' && (
-                        <div className="row g-3 mb-4">
-                            <div className="col-md-3">
-                                <Card className="text-center p-3 h-100">
-                                    <div className="text-primary mb-2 display-6">🚗</div>
-                                    <h6 className="text-muted small">LIVE SPEED</h6>
-                                    <h2 className="fw-bold mb-0">{telemetry.speed} <small className="text-muted fs-6">km/h</small></h2>
-                                </Card>
-                            </div>
-                            <div className="col-md-3">
-                                <Card className="text-center p-3 h-100">
-                                    <div className="text-success mb-2 display-6">🔋</div>
-                                    <h6 className="text-muted small">BATTERY</h6>
-                                    <h2 className="fw-bold mb-0">{telemetry.battery}%</h2>
-                                </Card>
-                            </div>
-                            <div className="col-md-3">
-                                <Card className="text-center p-3 h-100">
-                                    <div className="text-warning mb-2 display-6">🚙</div>
-                                    <h6 className="text-muted small">VEHICLE ID</h6>
-                                    <h4 className="fw-bold mb-0 text-dark">{vehicle.numberPlate}</h4>
-                                </Card>
-                            </div>
-                            <div className="col-md-3">
-                                <Card className="text-center p-3 h-100">
-                                    <div className="text-info mb-2 display-6">📊</div>
-                                    <h6 className="text-muted small">ODOMETER</h6>
-                                    <h2 className="fw-bold mb-0">{telemetry.odometer.toFixed(1)} <small className="text-muted fs-6">km</small></h2>
-                                </Card>
-                            </div>
-                        </div>
-                    )}
+                        <>
+                            {/* Battery Alert Banner */}
+                            {showBatteryAlert && (
+                                <div className="alert alert-danger d-flex align-items-center mb-3 animate__animated animate__shakeX" role="alert">
+                                    <div className="display-6 me-3">⚠️</div>
+                                    <div>
+                                        <h5 className="alert-heading mb-1">Low Battery Warning!</h5>
+                                        <p className="mb-0">Battery level is critically low at {telemetry.battery}%. Please charge your vehicle soon.</p>
+                                    </div>
+                                </div>
+                            )}
 
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                                <h5 className="fw-bold mb-0">Live Telemetry</h5>
+                                <small className="text-muted">
+                                    Last updated: {lastTelemetryUpdate.toLocaleTimeString()}
+                                </small>
+                            </div>
+
+                            <div className="row g-3 mb-4">
+                                <div className="col-md-3">
+                                    <Card className="text-center p-3 h-100">
+                                        <div className="text-primary mb-2 display-6">🚗</div>
+                                        <h6 className="text-muted small">LIVE SPEED</h6>
+                                        <h2 className="fw-bold mb-0">{telemetry.speed} <small className="text-muted fs-6">km/h</small></h2>
+                                    </Card>
+                                </div>
+                                <div className="col-md-3">
+                                    <Card className="text-center p-3 h-100">
+                                        <div className="text-success mb-2 display-6">🔋</div>
+                                        <h6 className="text-muted small">BATTERY</h6>
+                                        <h2 className="fw-bold mb-0">{telemetry.battery}%</h2>
+                                    </Card>
+                                </div>
+                                <div className="col-md-3">
+                                    <Card className="text-center p-3 h-100">
+                                        <div className="text-warning mb-2 display-6">🚙</div>
+                                        <h6 className="text-muted small">VEHICLE ID</h6>
+                                        <h4 className="fw-bold mb-0 text-dark">{vehicle.numberPlate}</h4>
+                                    </Card>
+                                </div>
+                                <div className="col-md-3">
+                                    <Card className="text-center p-3 h-100">
+                                        <div className="text-info mb-2 display-6">📊</div>
+                                        <h6 className="text-muted small">ODOMETER</h6>
+                                        <h2 className="fw-bold mb-0">{telemetry.odometer.toFixed(1)} <small className="text-muted fs-6">km</small></h2>
+                                    </Card>
+                                </div>
+                            </div>
+                        </>
+                    )}
                     <h3 className="mb-4 fw-bold">Vehicle Information</h3>
                     {vehicle && !showRegister ? (
                         <Card noPadding className="overflow-hidden mb-4">
