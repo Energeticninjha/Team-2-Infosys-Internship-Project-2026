@@ -1,0 +1,10 @@
+
+> frontend@0.1.0 build
+> react-scripts build
+
+Creating an optimized production build...
+Failed to compile.
+
+Module not found: Error: Can't resolve '../Common/Button' in 'C:\Users\snhyo\OneDrive\Desktop\neurofleetx1\frontend\src\components\Dashboard'
+
+

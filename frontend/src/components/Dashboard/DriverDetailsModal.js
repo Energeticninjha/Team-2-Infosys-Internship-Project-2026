@@ -1,113 +1,93 @@
 import React from 'react';
+import { X, Star, User, Car } from 'lucide-react';
+import Card from '../Common/Card';
+import Button from '../Common/Button';
 
 const DriverDetailsModal = ({ result, onClose, onSelect }) => {
     if (!result) return null;
     const { driver, vehicle, trip } = result;
 
     return (
-        <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}>
-            <div className="modal-dialog modal-lg modal-dialog-centered animate__animated animate__zoomIn">
-                <div className="modal-content text-white" style={{ background: '#1e2126', border: '1px solid #2c3e50' }}>
+        <div className="modal-backdrop-glass d-flex align-items-center justify-content-center" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1050, background: 'rgba(0,0,0,0.5)' }}>
+            <div className="bg-white rounded-4 shadow-lg overflow-hidden animate__animated animate__fadeInUp" style={{ width: '500px', maxWidth: '90%' }}>
+                {/* Header */}
+                <div className="bg-light p-3 border-bottom d-flex justify-content-between align-items-center">
+                    <h5 className="fw-bold mb-0">Driver & Vehicle Details</h5>
+                    <button className="btn-close" onClick={onClose}></button>
+                </div>
 
-                    {/* Header */}
-                    <div className="modal-header border-bottom border-secondary">
-                        <h5 className="modal-title text-info fw-bold">
-                            <i className="bi bi-car-front-fill me-2"></i> Ride Details
-                        </h5>
-                        <button type="button" className="btn-close btn-close-white" onClick={onClose}></button>
-                    </div>
-
-                    {/* Body */}
-                    <div className="modal-body p-4">
-                        <div className="row g-4">
-
-                            {/* Vehicle Image */}
-                            <div className="col-12 text-center mb-2">
-                                <img
-                                    src={vehicle?.vehiclePhotoUrl || 'https://via.placeholder.com/600x300?text=Vehicle+Photo'}
-                                    className="img-fluid rounded-3 shadow-lg object-fit-cover"
-                                    style={{ maxHeight: '250px', width: '100%', objectPosition: 'center' }}
-                                    alt="Vehicle"
-                                />
-                            </div>
-
-                            {/* Driver Info */}
-                            <div className="col-md-6 border-end border-secondary">
-                                <h6 className="text-secondary text-uppercase fw-bold small mb-3">Driver Information</h6>
-                                <div className="d-flex align-items-center mb-3">
-                                    <img
-                                        src={driver?.profilePhotoUrl || 'https://via.placeholder.com/100'}
-                                        className="rounded-circle border border-primary p-1 me-3"
-                                        style={{ width: '60px', height: '60px' }}
-                                        alt="Driver"
-                                    />
-                                    <div>
-                                        <h5 className="fw-bold mb-0">{driver?.name}</h5>
-                                        <div className="text-warning small">
-                                            {[...Array(5)].map((_, i) => (
-                                                <i key={i} className={`bi bi-star${i < (driver?.performanceScore || 5) ? '-fill' : ''}`}></i>
-                                            ))}
-                                            <span className="ms-1 text-white">({driver?.performanceScore || '5.0'})</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="ps-2">
-                                    <p className="mb-1"><i className="bi bi-telephone me-2 text-info"></i> {driver?.phone}</p>
-                                    <p className="mb-0"><i className="bi bi-envelope me-2 text-info"></i> {driver?.email}</p>
-                                </div>
-                            </div>
-
-                            {/* Vehicle Info */}
-                            <div className="col-md-6 ps-md-4">
-                                <h6 className="text-secondary text-uppercase fw-bold small mb-3">Vehicle Information</h6>
-                                <ul className="list-unstyled">
-                                    <li className="mb-2 d-flex justify-content-between">
-                                        <span>Model:</span> <span className="fw-bold">{vehicle?.model}</span>
-                                    </li>
-                                    <li className="mb-2 d-flex justify-content-between">
-                                        <span>Type:</span> <span className="badge bg-primary">{vehicle?.type}</span>
-                                    </li>
-                                    <li className="mb-2 d-flex justify-content-between">
-                                        <span>Plate No:</span> <span className="fw-mono text-warning">{vehicle?.numberPlate}</span>
-                                    </li>
-                                    <li className="mb-2 d-flex justify-content-between">
-                                        <span>Seats:</span> <span>{vehicle?.seats} Seater</span>
-                                    </li>
-                                </ul>
-                            </div>
-
-                            {/* Trip Info Section */}
-                            <div className="col-12 mt-4 pt-3 border-top border-secondary">
-                                <h6 className="text-secondary text-uppercase fw-bold small mb-3">Journey Details</h6>
-                                <div className="d-flex justify-content-between align-items-center bg-dark p-3 rounded-3 border border-secondary">
-                                    <div className="text-start">
-                                        <div className="text-secondary small">FROM</div>
-                                        <div className="fw-bold fs-5">{trip?.fromLocation}</div>
-                                        <div className="text-info small">{trip?.availableTime}</div>
-                                    </div>
-                                    <div className="text-center px-3">
-                                        <i className="bi bi-arrow-right fs-4 text-white"></i>
-                                        <div className="badge bg-success mt-1">₹{trip?.pricePerSeat} / Seat</div>
-                                    </div>
-                                    <div className="text-end">
-                                        <div className="text-secondary small">TO</div>
-                                        <div className="fw-bold fs-5">{trip?.toLocation}</div>
-                                        <div className="text-info small">{trip?.availableDate}</div>
-                                    </div>
-                                </div>
-                            </div>
-
+                <div className="p-4" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+                    {/* Driver Section */}
+                    <div className="text-center mb-4">
+                        <div className="position-relative d-inline-block">
+                            <img
+                                src={driver?.profilePhotoUrl || "https://randomuser.me/api/portraits/men/32.jpg"}
+                                className="rounded-circle border border-3 border-white shadow-sm"
+                                width="100" height="100"
+                                alt="Driver"
+                            />
+                            {driver?.isOnline && (
+                                <span className="position-absolute bottom-0 end-0 p-2 bg-success border border-white rounded-circle"></span>
+                            )}
+                        </div>
+                        <h4 className="fw-bold mt-2 mb-1">{driver?.name || "Unknown Driver"}</h4>
+                        <div className="d-flex justify-content-center gap-2 text-muted small">
+                            <span>{driver?.email}</span>
+                            <span>•</span>
+                            <span>{driver?.phone || "N/A"}</span>
+                        </div>
+                        <div className="d-flex justify-content-center align-items-center gap-1 mt-2 text-warning fw-bold">
+                            <Star size={16} fill="orange" />
+                            <span>{vehicle?.driverRating || '4.8'}</span>
+                            <span className="text-muted fw-normal">Rating</span>
                         </div>
                     </div>
 
-                    {/* Footer */}
-                    <div className="modal-footer border-top border-secondary">
-                        <button type="button" className="btn btn-outline-light" onClick={onClose}>Close</button>
-                        <button type="button" className="btn btn-primary fw-bold px-4" onClick={() => onSelect(result)}>
-                            <i className="bi bi-check-circle-fill me-2"></i> Select This Ride
-                        </button>
-                    </div>
+                    {/* Vehicle Card */}
+                    <Card className="mb-4 bg-light border-0">
+                        <div className="d-flex gap-3 align-items-center">
+                            <div className="bg-white p-2 rounded shadow-sm">
+                                <img
+                                    src={vehicle?.vehiclePhotoUrl || "https://cdni.iconscout.com/illustration/premium/thumb/electric-car-3454848-2886733.png"}
+                                    width="60"
+                                    alt="Car"
+                                />
+                            </div>
+                            <div>
+                                <h6 className="fw-bold mb-1">{vehicle?.model || "Standard Vehicle"}</h6>
+                                <div className="text-muted small">{vehicle?.numberPlate}</div>
+                                <div className="d-flex gap-2 mt-1">
+                                    <span className="badge bg-white text-secondary border">{vehicle?.type || 'Sedan'}</span>
+                                    {vehicle?.ev && <span className="badge bg-success-subtle text-success">EV</span>}
+                                    <span className="badge bg-white text-dark border">{vehicle?.seats || 4} Seats</span>
+                                </div>
+                            </div>
+                        </div>
+                    </Card>
 
+                    {/* Stats Grid */}
+                    <div className="row g-2 mb-4">
+                        <div className="col-6">
+                            <div className="p-3 bg-light rounded text-center">
+                                <small className="text-muted d-block uppercase x-small">TOTAL TRIPS</small>
+                                <span className="fw-bold fs-5">142</span>
+                            </div>
+                        </div>
+                        <div className="col-6">
+                            <div className="p-3 bg-light rounded text-center">
+                                <small className="text-muted d-block uppercase x-small">EXPERIENCE</small>
+                                <span className="fw-bold fs-5">4.5 Yrs</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="p-3 border-top bg-light d-flex gap-2 justify-content-end">
+                    <Button variant="ghost" onClick={onClose}>Close</Button>
+                    <Button className="px-4" onClick={onSelect}>
+                        Proceed to Book
+                    </Button>
                 </div>
             </div>
         </div>
