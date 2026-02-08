@@ -5,7 +5,7 @@ import HealthAnalytics from './HealthAnalytics';
 import ProfileSection from './ProfileSection';
 
 import DriverManagement from './DriverManagement';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import '../../styles/dashboard.css';
@@ -26,7 +26,7 @@ L.Icon.Default.mergeOptions({
 const ManagerDashboard = ({ logout }) => {
     const [activeView, setActiveView] = useState('tracking');
     const [fleetStats, setFleetStats] = useState({
-        activeVehicles: 0, driversOnline: 0, pendingAlerts: 3, onTimeDelivery: 94.2
+        activeVehicles: 0, driversOnline: 0, pendingAlerts: 0, onTimeDelivery: 94.2
     });
     const [vehicles, setVehicles] = useState([]);
     const [trips, setTrips] = useState([]);
@@ -76,7 +76,9 @@ const ManagerDashboard = ({ logout }) => {
                 setOnlineDriversList(dRes.data || []);
 
                 const vehiclesList = vRes.data || [];
-                const activeCount = vehiclesList.filter(v => v.status === 'Active' || v.status === 'BUSY').length;
+                const activeCount = vehiclesList.filter(v =>
+                    ['active', 'busy', 'enroute', 'on_trip'].includes(v.status?.toLowerCase())
+                ).length;
                 const alertsCount = vehiclesList.filter(v => v.engineHealth < 30 || v.tireWear > 80 || v.batteryHealth < 30).length;
 
                 setFleetStats({
@@ -88,7 +90,7 @@ const ManagerDashboard = ({ logout }) => {
 
                 const bRes = await axios.get('http://localhost:8083/api/bookings', config);
                 const allBookings = bRes.data || [];
-                setTrips(allBookings.filter(b => ["CONFIRMED", "ENROUTE", "PICKED_UP"].includes(b.status)));
+                setTrips(allBookings.filter(b => b.status === 'ENROUTE' || b.status === 'PICKED_UP'));
                 setPendingBookings(allBookings.filter(b => b.status === 'PENDING' || !b.vehicle));
 
             } catch (error) { console.error("Error fetching data", error); }
@@ -177,45 +179,10 @@ const ManagerDashboard = ({ logout }) => {
                                     <div className="position-relative" style={{ height: '600px', width: '100%' }}>
                                         <MapContainer center={[12.9716, 77.5946]} zoom={12} style={{ height: '100%', width: '100%' }}>
                                             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
-
-                                            {/* Draw Active Mission Routes */}
-                                            {trips.map(trip => {
-                                                // Check if we have valid destination coordinates (added in recent update)
-                                                if (trip.endLat && trip.endLng) {
-                                                    const startPos = trip.vehicle && trip.vehicle.latitude ? [trip.vehicle.latitude, trip.vehicle.longitude] : [trip.startLat, trip.startLng];
-
-                                                    // If we have a valid start position (either vehicle or pickup), draw line to dropoff
-                                                    if (startPos && startPos[0] && startPos[1]) {
-                                                        return (
-                                                            <React.Fragment key={trip.id}>
-                                                                <Polyline
-                                                                    positions={[startPos, [trip.endLat, trip.endLng]]}
-                                                                    pathOptions={{ color: '#6366f1', weight: 4, opacity: 0.7, dashArray: '10, 10' }}
-                                                                />
-                                                                <Marker position={[trip.endLat, trip.endLng]}>
-                                                                    <Popup>
-                                                                        <div className="text-center">
-                                                                            <strong>🏁 Destination</strong><br />
-                                                                            {trip.endLocation}
-                                                                        </div>
-                                                                    </Popup>
-                                                                </Marker>
-                                                            </React.Fragment>
-                                                        );
-                                                    }
-                                                }
-                                                return null;
-                                            })}
-
                                             {onlineDriversList.map((item, idx) => {
                                                 const { driver, vehicle, activeTrip } = item;
-
-                                                // Check if this driver has a real active booking (Mission)
-                                                const activeMission = trips.find(t => t.vehicleId === vehicle?.id);
-
-                                                const lat = vehicle?.latitude || driver.currentLat || 12.9716;
-                                                const lng = vehicle?.longitude || driver.currentLng || 77.5946;
-
+                                                const lat = activeTrip?.fromLat || driver.currentLat || vehicle?.latitude || 12.9716;
+                                                const lng = activeTrip?.fromLng || driver.currentLng || vehicle?.longitude || 77.5946;
                                                 return (
                                                     <Marker key={idx} position={[lat, lng]}>
                                                         <Popup>
@@ -248,17 +215,9 @@ const ManagerDashboard = ({ logout }) => {
                                                                     </div>
                                                                 )}
 
-                                                                {activeMission ? (
-                                                                    <div className="mb-2 p-2 bg-primary-subtle rounded border border-primary">
-                                                                        <div className="small fw-bold text-primary mb-1">🚀 Enroute Mission</div>
-                                                                        <div className="small text-dark">
-                                                                            <strong>Customer:</strong> {activeMission.userName || 'Guest'}<br />
-                                                                            <span className="text-truncate d-block" style={{ maxWidth: '180px' }}>To: {activeMission.endLocation}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                ) : activeTrip ? (
+                                                                {activeTrip ? (
                                                                     <div className="mb-2">
-                                                                        <div className="small fw-bold text-primary mb-1">Job Posted</div>
+                                                                        <div className="small fw-bold text-primary mb-1">On Trip</div>
                                                                         <div className="d-flex align-items-center small text-dark">
                                                                             <span className="text-truncate" style={{ maxWidth: '80px' }}>{activeTrip.fromLocation}</span>
                                                                             <span className="mx-1 text-muted">➝</span>
@@ -373,103 +332,118 @@ const ManagerDashboard = ({ logout }) => {
                             )}
                             {selectedDocs && (
                                 <div>
-                                    <h6>Verify Documents</h6>
-                                    <div className="row g-2 mb-3">
-                                        <div className="col-6"><div className="border p-2 text-center bg-light">License</div></div>
-                                        <div className="col-6"><div className="border p-2 text-center bg-light">ID Card</div></div>
+                                    <h5 className="fw-bold mb-3">Verify Documents</h5>
+                                    <div className="row g-2 mb-4">
+                                        <div className="col-6">
+                                            <div className="card h-100 border-0 shadow-sm">
+                                                <div className="card-body text-center p-3">
+                                                    <div className="mb-2">🪪 License</div>
+                                                    {selectedDocs.driverLicenseUrl ? (
+                                                        <a href={selectedDocs.driverLicenseUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline-primary w-100">View Document</a>
+                                                    ) : <span className="text-muted small">Not Uploaded</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="col-6">
+                                            <div className="card h-100 border-0 shadow-sm">
+                                                <div className="card-body text-center p-3">
+                                                    <div className="mb-2">🆔 ID Card</div>
+                                                    {selectedDocs.identificationUrl ? (
+                                                        <a href={selectedDocs.identificationUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline-primary w-100">View Document</a>
+                                                    ) : <span className="text-muted small">Not Uploaded</span>}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <Button onClick={() => updateVehicleDocs(selectedDocs.id, 'Verified')} className="w-100">Verify & Approve</Button>
+                                    <div className="d-grid gap-2">
+                                        <Button onClick={() => {
+                                            updateVehicleStatus(selectedDocs.id, 'Active', 'Verified');
+                                            setSelectedDocs(null);
+                                        }} variant="success">Verify & Approve</Button>
+                                    </div>
                                 </div>
                             )}
                         </Card>
                     </div>
-                )}
+                )
+                }
 
-                {activeView === 'assignments' && (
-                    <div className="row g-4 animate-fade-in">
-                        <div className="col-md-5">
-                            <Card noPadding>
-                                <div className="p-3 bg-warning-subtle"><h5 className="mb-0 fw-bold">Pending Bookings</h5></div>
-                                <div className="list-group list-group-flush">
-                                    {pendingBookings.map(b => (
-                                        <button key={b.id} className={`list-group-item list-group-item-action p-3 ${selectedBookingId === b.id ? 'bg-light' : ''}`} onClick={() => fetchRecommendations(b.id)}>
-                                            <div className="fw-bold">BK-{b.id}</div>
-                                            <small>{b.startLocation} ➝ {b.endLocation}</small>
-                                        </button>
-                                    ))}
+                {
+                    activeView === 'assignments' && (
+                        <>
+                            <div className="row g-4 animate-fade-in">
+                                <div className="col-md-5">
+                                    <Card noPadding>
+                                        <div className="p-3 bg-warning-subtle"><h5 className="mb-0 fw-bold">Pending Bookings</h5></div>
+                                        <div className="list-group list-group-flush">
+                                            {pendingBookings.map(b => (
+                                                <button key={b.id} className={`list-group-item list-group-item-action p-3 ${selectedBookingId === b.id ? 'bg-light' : ''}`} onClick={() => fetchRecommendations(b.id)}>
+                                                    <div className="fw-bold">BK-{b.id}</div>
+                                                    <small>{b.startLocation} ➝ {b.endLocation}</small>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </Card>
                                 </div>
-                            </Card>
-                        </div>
-                        <div className="col-md-7">
-                            <Card noPadding>
-                                <div className="p-3 bg-dark text-white"><h5 className="mb-0">Smart Driver Recommendations</h5></div>
-                                <div className="p-3">
-                                    {selectedBookingId ? (
-                                        <table className="table align-middle">
+                                <div className="col-md-7">
+                                    <Card noPadding>
+                                        <div className="p-3 bg-dark text-white"><h5 className="mb-0">Smart Driver Recommendations</h5></div>
+                                        <div className="p-3">
+                                            {selectedBookingId ? (
+                                                <table className="table align-middle">
+                                                    <tbody>
+                                                        {recommendedDrivers.map((driver, index) => (
+                                                            <tr key={driver.id}>
+                                                                <td><div className="fw-bold">{driver.driverName}</div><small>{driver.model}</small></td>
+                                                                <td>⭐ {driver.driverRating}</td>
+                                                                <td><Button className="btn-sm">Assign</Button></td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            ) : <div className="text-center text-muted p-4">Select a booking</div>}
+                                        </div>
+                                    </Card>
+                                </div>
+                            </div>
+
+                            {/* Active Assignments List */}
+                            <div className="mt-4">
+                                <Card noPadding>
+                                    <div className="p-3 bg-success-subtle"><h5 className="mb-0 fw-bold">Active Assignments</h5></div>
+                                    <div className="table-responsive">
+                                        <table className="table align-middle mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Trip ID</th>
+                                                    <th>Driver</th>
+                                                    <th>Customer</th>
+                                                    <th>Route</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
                                             <tbody>
-                                                {recommendedDrivers.map((driver, index) => (
-                                                    <tr key={driver.id}>
-                                                        <td><div className="fw-bold">{driver.driverName}</div><small>{driver.model}</small></td>
-                                                        <td>⭐ {driver.driverRating}</td>
-                                                        <td><Button className="btn-sm">Assign</Button></td>
+                                                {trips.length > 0 ? trips.map(t => (
+                                                    <tr key={t.id}>
+                                                        <td>#{t.id}</td>
+                                                        <td>{t.vehicle ? t.vehicle.driverName : 'N/A'}</td>
+                                                        <td>{t.user ? t.user.name : 'Guest'}</td>
+                                                        <td>{t.startLocation} ➝ {t.endLocation}</td>
+                                                        <td><span className="badge bg-primary">{t.status}</span></td>
                                                     </tr>
-                                                ))}
+                                                )) : <tr><td colSpan="5" className="text-center p-3">No active assignments</td></tr>}
                                             </tbody>
                                         </table>
-                                    ) : (
-                                        <div className="text-center text-muted p-4">
-                                            <p>Select a pending booking to see recommendations.</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Active Missions Section */}
-                                <div className="p-3 bg-success text-white mt-3"><h5 className="mb-0">Active Missions (Enroute)</h5></div>
-                                <div className="table-responsive">
-                                    <table className="table table-hover align-middle mb-0">
-                                        <thead className="table-light">
-                                            <tr>
-                                                <th>ID</th>
-                                                <th>Driver</th>
-                                                <th>Customer</th>
-                                                <th>Route</th>
-                                                <th>Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {trips.length === 0 ? (
-                                                <tr><td colSpan="5" className="text-center p-3 text-muted">No active missions currently.</td></tr>
-                                            ) : (
-                                                trips.map(trip => (
-                                                    <tr key={trip.id}>
-                                                        <td>#{trip.id}</td>
-                                                        <td>
-                                                            <div className="d-flex align-items-center">
-                                                                <div className="fw-bold">{trip.vehicle?.driverName || 'Unknown'}</div>
-                                                            </div>
-                                                        </td>
-                                                        <td>{trip.userName || 'Customer'}</td>
-                                                        <td>
-                                                            <div className="small text-muted">From: {trip.startLocation}</div>
-                                                            <div className="small text-muted">To: {trip.endLocation}</div>
-                                                        </td>
-                                                        <td>
-                                                            <span className="badge bg-primary animate-pulse">{trip.status}</span>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </Card>
-                        </div>
-                    </div>
-                )}
+                                    </div>
+                                </Card>
+                            </div>
+                        </>
+                    )
+                }
 
                 {activeView === 'drivers' && <DriverManagement />}
                 {activeView === 'profile' && <ProfileSection userId={sessionStorage.getItem('userId')} />}
-            </div>
+            </div >
         </MainLayout >
     );
 };

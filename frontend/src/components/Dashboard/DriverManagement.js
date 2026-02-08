@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import Card from '../Common/Card';
@@ -51,43 +51,14 @@ const DriverManagement = () => {
     };
 
     const openMap = (item) => {
-        const { driver, activeTrip, activeBooking } = item;
+        const { driver, activeTrip } = item;
         const lat = activeTrip?.fromLat || driver.currentLat;
         const lng = activeTrip?.fromLng || driver.currentLng;
-        // For booking, we rely on driver current lat/lng as booking has no coords
-        if (lat || lng) { // Relax check slightly or rely on driver.currentLat
-            setMapLocation({
-                lat: lat || driver.currentLat,
-                lng: lng || driver.currentLng,
-                name: driver.name,
-                vehicle: driver.vehicleId,
-                activeTrip,
-                activeBooking, // Pass booking
-                driverId: driver.id
-            });
+        if (lat && lng) {
+            setMapLocation({ lat, lng, name: driver.name, vehicle: driver.vehicleId });
             setShowMapModal(true);
         } else { alert("Driver location not available yet."); }
     };
-
-    // Live Tracking in Modal
-    useEffect(() => {
-        let interval;
-        if (showMapModal && mapLocation?.driverId) {
-            interval = setInterval(async () => {
-                try {
-                    const response = await axios.get('http://localhost:8083/api/manager/drivers/online');
-                    const updated = response.data.find(d => d.driver.id === mapLocation.driverId);
-                    if (updated) {
-                        const { driver, activeTrip } = updated;
-                        const lat = activeTrip?.fromLat || driver.currentLat;
-                        const lng = activeTrip?.fromLng || driver.currentLng;
-                        setMapLocation(prev => ({ ...prev, lat, lng, activeTrip }));
-                    }
-                } catch (e) { console.error("Tracking Error"); }
-            }, 3000);
-        }
-        return () => clearInterval(interval);
-    }, [showMapModal, mapLocation?.driverId]);
 
     const fetchDriverDetails = async (driverId) => {
         try {
@@ -254,20 +225,6 @@ const DriverManagement = () => {
                                 <MapContainer center={[mapLocation.lat, mapLocation.lng]} zoom={15} style={{ height: "100%", width: "100%" }}>
                                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                                     <Marker position={[mapLocation.lat, mapLocation.lng]}><Popup>{mapLocation.name}</Popup></Marker>
-                                    {mapLocation.activeTrip && mapLocation.activeTrip.toLat && (
-                                        <>
-                                            <Polyline
-                                                positions={[
-                                                    [mapLocation.lat, mapLocation.lng],
-                                                    [mapLocation.activeTrip.toLat, mapLocation.activeTrip.toLng]
-                                                ]}
-                                                pathOptions={{ color: 'blue', dashArray: '10, 10' }}
-                                            />
-                                            <Marker position={[mapLocation.activeTrip.toLat, mapLocation.activeTrip.toLng]}>
-                                                <Popup>Destination: {mapLocation.activeTrip.toLocation}</Popup>
-                                            </Marker>
-                                        </>
-                                    )}
                                 </MapContainer>
                             </div>
                         )}

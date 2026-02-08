@@ -27,12 +27,7 @@ public class Booking {
     private Vehicle vehicle;
 
     private String startLocation;
-    private Double startLat;
-    private Double startLng;
-
     private String endLocation;
-    private Double endLat;
-    private Double endLng;
     private String estimatedDuration; // e.g. "24 mins"
 
     private LocalDateTime startTime;
@@ -44,4 +39,6 @@ public class Booking {
 
     private String review;
     private Double rating;
+
+    private Integer passengerCount; // Added field
 }

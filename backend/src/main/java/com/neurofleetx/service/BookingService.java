@@ -118,40 +118,23 @@ public class BookingService {
         LocalDateTime scheduledTime = request.getScheduledStartTime() != null ? request.getScheduledStartTime()
                 : LocalDateTime.now();
 
+        // Calculate Route logic (simplified/removed simulation)
         if (request.getStartLocation() != null && request.getEndLocation() != null) {
-            List<RouteOption> routes = routeService.calculateRoutes(new RouteRequest(
-                    request.getStartLocation(), request.getEndLocation(),
-                    null, null, null, null, "fastest"));
-
-            if (!routes.isEmpty()) {
-                simulationService.startTrip(vehicle.getId(), routes.get(0).getPath(), scheduledTime);
-            }
+            // Optional: Validate route exists
         }
 
         Booking booking = Booking.builder()
                 .user(user)
                 .vehicle(vehicle)
                 .startLocation(request.getStartLocation())
-                .startLat(request.getStartLat())
-                .startLng(request.getStartLng())
                 .endLocation(request.getEndLocation())
-                .endLat(request.getEndLat())
-                .endLng(request.getEndLng())
                 .estimatedDuration(request.getEstimatedTime())
-                .startTime(LocalDateTime.now())
+                .startTime(null)
                 .scheduledStartTime(scheduledTime)
-                .status("PENDING")
+                .status("PENDING") // Default to PENDING for driver acceptance
                 .amount(request.getPrice())
+                .passengerCount(request.getPassengerCount())
                 .build();
-
-        // If scheduled for > 5 mins from now, mark as SCHEDULED
-        if (scheduledTime.isAfter(LocalDateTime.now().plusMinutes(5))) {
-            booking.setStatus("SCHEDULED");
-            booking.setStartTime(null); // Ensure it doesn't show as active
-        } else {
-            vehicle.setStatus("Enroute");
-            vehicleRepo.save(vehicle);
-        }
 
         return bookingRepo.save(booking);
     }
