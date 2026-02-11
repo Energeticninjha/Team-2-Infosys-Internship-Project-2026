@@ -334,4 +334,10 @@ public class VehicleController {
     public ResponseEntity<Map<String, Object>> getFleetUtilization() {
         return ResponseEntity.ok(telemetryService.getFleetUtilization());
     }
+
+    @GetMapping("/health/trends")
+    public ResponseEntity<Map<String, Object>> getFleetHealthTrends(
+            @RequestParam(defaultValue = "7") int days) {
+        return ResponseEntity.ok(telemetryService.getFleetHealthTrends(days));
+    }
 }

@@ -13,25 +13,62 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 const HealthAnalytics = () => {
     const [vehicles, setVehicles] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [healthTrends, setHealthTrends] = useState(null);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await axios.get('http://localhost:8083/api/vehicles');
-                setVehicles(res.data);
+                const [vehiclesRes, trendsRes] = await Promise.all([
+                    axios.get('http://localhost:8083/api/vehicles'),
+                    axios.get('http://localhost:8083/api/vehicles/health/trends?days=7')
+                ]);
+                setVehicles(vehiclesRes.data);
+                setHealthTrends(trendsRes.data);
                 setLoading(false);
-            } catch (err) { console.error("Error fetching health data", err); }
+            } catch (err) {
+                console.error("Error fetching health data", err);
+                setLoading(false);
+            }
         };
         fetchData();
         const interval = setInterval(fetchData, 5000);
         return () => clearInterval(interval);
     }, []);
 
-    const lineData = {
-        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    // Prepare line chart data from real historical data
+    const lineData = healthTrends ? {
+        labels: healthTrends.labels.map(label => {
+            const date = new Date(label);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }),
         datasets: [
-            { label: 'Avg Engine Health (%)', data: [98, 97, 96.5, 96, 95.8, 95.2, 94.5], borderColor: 'rgb(255, 99, 132)', backgroundColor: 'rgba(255, 99, 132, 0.5)', tension: 0.3 },
-            { label: 'Avg Battery Health (%)', data: [99, 98.5, 98, 97.4, 97, 96.2, 95.5], borderColor: 'rgb(53, 162, 235)', backgroundColor: 'rgba(53, 162, 235, 0.5)', tension: 0.3 }
+            {
+                label: 'Avg Engine Health (%)',
+                data: healthTrends.engineHealth,
+                borderColor: 'rgb(255, 99, 132)',
+                backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                tension: 0.3
+            },
+            {
+                label: 'Avg Battery Health (%)',
+                data: healthTrends.batteryHealth,
+                borderColor: 'rgb(53, 162, 235)',
+                backgroundColor: 'rgba(53, 162, 235, 0.5)',
+                tension: 0.3
+            },
+            {
+                label: 'Avg Tire Wear (%)',
+                data: healthTrends.tireWear,
+                borderColor: 'rgb(255, 206, 86)',
+                backgroundColor: 'rgba(255, 206, 86, 0.5)',
+                tension: 0.3
+            }
+        ]
+    } : {
+        labels: ['Loading...'],
+        datasets: [
+            { label: 'Avg Engine Health (%)', data: [100], borderColor: 'rgb(255, 99, 132)', backgroundColor: 'rgba(255, 99, 132, 0.5)', tension: 0.3 },
+            { label: 'Avg Battery Health (%)', data: [100], borderColor: 'rgb(53, 162, 235)', backgroundColor: 'rgba(53, 162, 235, 0.5)', tension: 0.3 }
         ]
     };
 

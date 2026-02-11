@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import '../../styles/dashboard.css';
 import ProfileSection from './ProfileSection';
 import TripPostingComponent from './TripPostingComponent';
+import MissionControl from './MissionControl';
 
 // New Design System
 import MainLayout from '../Layout/MainLayout';
@@ -164,6 +165,25 @@ const DriverDashboard = ({ logout }) => {
             return () => clearInterval(locInterval);
         }
     }, [vehicle, currentPos, isTripping, driverStatus]);
+
+    // Force Online Status Sync on Mount
+    useEffect(() => {
+        const syncOnlineStatus = async () => {
+            if (driverId && driverStatus === 'Available') {
+                try {
+                    console.log("🔄 Syncing Online Status for Driver:", driverId);
+                    await axios.put(`http://localhost:8083/api/driver/${driverId}/online-status`, { isOnline: true });
+                } catch (e) {
+                    console.error("Failed to sync online status", e);
+                }
+            }
+        };
+        syncOnlineStatus();
+
+        // Heartbeat every 30 seconds to keep online
+        const heartbeat = setInterval(syncOnlineStatus, 30000);
+        return () => clearInterval(heartbeat);
+    }, [driverId, driverStatus]);
 
 
 
@@ -554,48 +574,9 @@ const DriverDashboard = ({ logout }) => {
             )}
 
             {activeView === 'mission' && (
-                <div className="position-relative w-100 h-100">
-                    {(!vehicle || vehicle.status === 'Pending') ? (
-                        <div className="d-flex align-items-center justify-content-center h-100 flex-column text-muted">
-                            <div className="display-1">🔒</div>
-                            <h3>Mission Control Locked</h3>
-                            <p>Waiting for vehicle approval.</p>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="map-container w-100 h-100">
-                                <MapContainer center={currentPos} zoom={15} style={{ height: '100%', width: '100%' }}>
-                                    <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
-                                    <Marker position={currentPos} icon={CarIcon} />
-                                    {polyline.length > 0 && <Polyline positions={polyline} color="blue" />}
-                                    <RecenterMap coords={currentPos} />
-                                </MapContainer>
-                            </div>
-
-                            {/* Mission Overlay Panel */}
-                            {activeBooking && (
-                                <div className="position-absolute bottom-0 start-0 w-100 p-3" style={{ zIndex: 1000 }}>
-                                    <Card className="shadow-lg animate__animated animate__slideInUp">
-                                        <div className="d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <h5 className="fw-bold mb-0">Active Mission: {activeBooking.destination}</h5>
-                                                <small className="text-muted">Passenger: {activeBooking.userName}</small>
-                                            </div>
-                                            <div className="d-flex gap-2">
-                                                {!isTripping ? (
-                                                    <Button variant="success" onClick={startTrip} disabled={isTripping}>Start Trip</Button>
-                                                ) : (
-                                                    <Button variant="danger" onClick={completeTrip}>Complete Trip</Button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </Card>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
+                <MissionControl />
             )}
+
 
             {activeView === 'profile' && <div className="p-4"><ProfileSection userId={sessionStorage.getItem('userId')} /></div>}
         </MainLayout>

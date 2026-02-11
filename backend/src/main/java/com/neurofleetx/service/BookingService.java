@@ -134,6 +134,8 @@ public class BookingService {
                 .status("PENDING") // Default to PENDING for driver acceptance
                 .amount(request.getPrice())
                 .passengerCount(request.getPassengerCount())
+                .tripId(request.getTripId()) // Set trip ID if booking from posted trip
+                .driverId(request.getDriverId()) // Set driver ID if booking from posted trip
                 .build();
 
         return bookingRepo.save(booking);

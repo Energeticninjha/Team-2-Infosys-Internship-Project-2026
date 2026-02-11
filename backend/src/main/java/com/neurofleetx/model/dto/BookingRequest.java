@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 public class BookingRequest {
     private Long userId;
     private Long vehicleId;
+    private Long tripId; // For bookings from posted trips
+    private Long driverId; // Driver who posted the trip
     private String startLocation;
     private String endLocation;
     private Double price;

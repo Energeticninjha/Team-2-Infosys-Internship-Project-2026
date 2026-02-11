@@ -187,4 +187,83 @@ public class TelemetryService {
 
         return metrics;
     }
+
+    public Map<String, Object> getFleetHealthTrends(int days) {
+        LocalDateTime since = LocalDateTime.now().minusDays(days);
+        List<TelemetryHistory> allHistory = telemetryHistoryRepo.findAll().stream()
+                .filter(h -> h.getRecordedAt() != null && h.getRecordedAt().isAfter(since))
+                .sorted((a, b) -> a.getRecordedAt().compareTo(b.getRecordedAt()))
+                .toList();
+
+        // Group by day and calculate averages
+        Map<String, double[]> dailyAverages = new java.util.LinkedHashMap<>();
+
+        for (int i = 0; i < days; i++) {
+            LocalDateTime dayStart = LocalDateTime.now().minusDays(days - i - 1).withHour(0).withMinute(0)
+                    .withSecond(0);
+            LocalDateTime dayEnd = dayStart.plusDays(1);
+
+            List<TelemetryHistory> dayData = allHistory.stream()
+                    .filter(h -> h.getRecordedAt().isAfter(dayStart) && h.getRecordedAt().isBefore(dayEnd))
+                    .toList();
+
+            if (!dayData.isEmpty()) {
+                double avgEngine = dayData.stream()
+                        .filter(h -> h.getEngineHealth() != null)
+                        .mapToDouble(TelemetryHistory::getEngineHealth)
+                        .average()
+                        .orElse(100.0);
+
+                double avgBattery = dayData.stream()
+                        .filter(h -> h.getBatteryHealth() != null)
+                        .mapToDouble(TelemetryHistory::getBatteryHealth)
+                        .average()
+                        .orElse(100.0);
+
+                double avgTireWear = dayData.stream()
+                        .filter(h -> h.getTireWear() != null)
+                        .mapToDouble(TelemetryHistory::getTireWear)
+                        .average()
+                        .orElse(0.0);
+
+                String dayLabel = dayStart.toLocalDate().toString();
+                dailyAverages.put(dayLabel, new double[] { avgEngine, avgBattery, avgTireWear });
+            }
+        }
+
+        // If no historical data, use current vehicle data
+        if (dailyAverages.isEmpty()) {
+            List<Vehicle> vehicles = vehicleRepo.findAll();
+            double avgEngine = vehicles.stream()
+                    .filter(v -> v.getEngineHealth() != null)
+                    .mapToDouble(Vehicle::getEngineHealth)
+                    .average()
+                    .orElse(100.0);
+
+            double avgBattery = vehicles.stream()
+                    .filter(v -> v.getBatteryHealth() != null)
+                    .mapToDouble(Vehicle::getBatteryHealth)
+                    .average()
+                    .orElse(100.0);
+
+            double avgTireWear = vehicles.stream()
+                    .filter(v -> v.getTireWear() != null)
+                    .mapToDouble(Vehicle::getTireWear)
+                    .average()
+                    .orElse(0.0);
+
+            for (int i = 0; i < days; i++) {
+                String dayLabel = LocalDateTime.now().minusDays(days - i - 1).toLocalDate().toString();
+                dailyAverages.put(dayLabel, new double[] { avgEngine, avgBattery, avgTireWear });
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("labels", new java.util.ArrayList<>(dailyAverages.keySet()));
+        result.put("engineHealth", dailyAverages.values().stream().mapToDouble(arr -> arr[0]).toArray());
+        result.put("batteryHealth", dailyAverages.values().stream().mapToDouble(arr -> arr[1]).toArray());
+        result.put("tireWear", dailyAverages.values().stream().mapToDouble(arr -> arr[2]).toArray());
+
+        return result;
+    }
 }

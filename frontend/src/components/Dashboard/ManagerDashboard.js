@@ -171,7 +171,7 @@ const ManagerDashboard = ({ logout }) => {
 
                 const bRes = await axios.get('http://localhost:8083/api/bookings', config);
                 const allBookings = bRes.data || [];
-                setTrips(allBookings.filter(b => b.status === 'ENROUTE' || b.status === 'PICKED_UP'));
+                setTrips(allBookings.filter(b => b.status === 'ENROUTE' || b.status === 'PICKED_UP' || b.status === 'CONFIRMED'));
                 setPendingBookings(allBookings.filter(b => b.status === 'PENDING' || !b.vehicle));
 
                 // Fetch alerts
@@ -518,7 +518,7 @@ const ManagerDashboard = ({ logout }) => {
                 {/* Modals reused logic... */}
                 {(selectedDriver || selectedVehicle || selectedDocs) && (
                     <div className="modal-backdrop-glass position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1050, background: 'rgba(0,0,0,0.5)' }}>
-                        <Card className="shadow-lg" style={{ width: '500px', maxWidth: '90%' }}>
+                        <Card className="shadow-lg" style={{ width: selectedDocs ? '800px' : '500px', maxWidth: '90%', transition: 'width 0.3s ease' }}>
                             <div className="d-flex justify-content-between mb-3">
                                 <h5 className="fw-bold">Details</h5>
                                 <button className="btn-close" onClick={() => { setSelectedDriver(null); setSelectedVehicle(null); setSelectedDocs(null); }}></button>
@@ -548,7 +548,14 @@ const ManagerDashboard = ({ logout }) => {
                                                 <div className="card-body text-center p-3">
                                                     <div className="mb-2">🪪 License</div>
                                                     {selectedDocs.driverLicenseUrl ? (
-                                                        <a href={selectedDocs.driverLicenseUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline-primary w-100">View Document</a>
+                                                        <img
+                                                            src={selectedDocs.driverLicenseUrl}
+                                                            alt="License"
+                                                            className="img-fluid rounded border shadow-sm"
+                                                            style={{ maxHeight: '250px', width: '100%', objectFit: 'contain', cursor: 'pointer' }}
+                                                            onClick={() => window.open(selectedDocs.driverLicenseUrl, '_blank')}
+                                                            title="Click to view full size"
+                                                        />
                                                     ) : <span className="text-muted small">Not Uploaded</span>}
                                                 </div>
                                             </div>
@@ -558,17 +565,23 @@ const ManagerDashboard = ({ logout }) => {
                                                 <div className="card-body text-center p-3">
                                                     <div className="mb-2">🆔 ID Card</div>
                                                     {selectedDocs.identificationUrl ? (
-                                                        <a href={selectedDocs.identificationUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline-primary w-100">View Document</a>
+                                                        <img
+                                                            src={selectedDocs.identificationUrl}
+                                                            alt="ID Card"
+                                                            className="img-fluid rounded border shadow-sm"
+                                                            style={{ maxHeight: '250px', width: '100%', objectFit: 'contain', cursor: 'pointer' }}
+                                                            onClick={() => window.open(selectedDocs.identificationUrl, '_blank')}
+                                                            title="Click to view full size"
+                                                        />
                                                     ) : <span className="text-muted small">Not Uploaded</span>}
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                     <div className="d-grid gap-2">
-                                        <Button onClick={() => {
-                                            updateVehicleStatus(selectedDocs.id, 'Active', 'Verified');
-                                            setSelectedDocs(null);
-                                        }} variant="success">Verify & Approve</Button>
+                                        <Button onClick={() => updateVehicleDocs(selectedDocs.id, 'Verified')} variant="success">
+                                            Verify Documents
+                                        </Button>
                                     </div>
                                 </div>
                             )}
@@ -622,25 +635,58 @@ const ManagerDashboard = ({ logout }) => {
                                     <div className="p-3 bg-success-subtle"><h5 className="mb-0 fw-bold">Active Assignments</h5></div>
                                     <div className="table-responsive">
                                         <table className="table align-middle mb-0">
-                                            <thead>
+                                            <thead className="bg-light">
                                                 <tr>
-                                                    <th>Trip ID</th>
-                                                    <th>Driver</th>
-                                                    <th>Customer</th>
+                                                    <th className="ps-4">Trip Details</th>
                                                     <th>Route</th>
+                                                    <th>Customer</th>
+                                                    <th>Date & Time</th>
                                                     <th>Status</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {trips.length > 0 ? trips.map(t => (
                                                     <tr key={t.id}>
-                                                        <td>#{t.id}</td>
-                                                        <td>{t.vehicle ? t.vehicle.driverName : 'N/A'}</td>
-                                                        <td>{t.user ? t.user.name : 'Guest'}</td>
-                                                        <td>{t.startLocation} ➝ {t.endLocation}</td>
-                                                        <td><span className="badge bg-primary">{t.status}</span></td>
+                                                        <td className="ps-4">
+                                                            <div className="d-flex align-items-center">
+                                                                <div className="bg-light rounded-circle p-2 me-3 text-primary">
+                                                                    <i className="bi bi-car-front-fill"></i>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="fw-bold text-dark">{t.vehicle ? t.vehicle.driverName : 'Unassigned'}</div>
+                                                                    <small className="text-muted">Trip #{t.id}</small>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <div className="d-flex flex-column">
+                                                                <small className="text-muted">From: <span className="text-dark fw-bold">{t.startLocation}</span></small>
+                                                                <small className="text-muted">To: <span className="text-dark fw-bold">{t.endLocation}</span></small>
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            <div className="d-flex align-items-center">
+                                                                <div className="fw-bold">{t.user ? t.user.name : 'Guest'}</div>
+                                                            </div>
+                                                            <small className="text-muted">{t.user?.phone || 'N/A'}</small>
+                                                        </td>
+                                                        <td>
+                                                            <div className="fw-bold">{new Date(t.scheduledStartTime || t.startTime).toLocaleDateString()}</div>
+                                                            <small className="text-muted">{new Date(t.scheduledStartTime || t.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
+                                                        </td>
+                                                        <td>
+                                                            <span className={`badge ${t.status === 'CONFIRMED' ? 'bg-success' : 'bg-primary'} rounded-pill px-3`}>
+                                                                {t.status}
+                                                            </span>
+                                                        </td>
                                                     </tr>
-                                                )) : <tr><td colSpan="5" className="text-center p-3">No active assignments</td></tr>}
+                                                )) : (
+                                                    <tr>
+                                                        <td colSpan="5" className="text-center p-4 text-muted">
+                                                            No active assignments found.
+                                                        </td>
+                                                    </tr>
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>

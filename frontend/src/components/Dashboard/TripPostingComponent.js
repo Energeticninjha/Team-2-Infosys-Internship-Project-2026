@@ -18,7 +18,7 @@ const TripPostingComponent = ({ vehicle, onTripPosted }) => {
         setFormData({ ...formData, [field]: query });
         if (query.length > 2) {
             try {
-                const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&countrycodes=in&limit=5`);
+                const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&countrycodes=in&limit=5&accept-language=en`);
                 setSuggestions(res.data);
                 setActiveField(field);
             } catch (e) { console.error("Geocoding error", e); }
@@ -45,13 +45,13 @@ const TripPostingComponent = ({ vehicle, onTripPosted }) => {
             // Attempt Geocoding if coordinates are missing
             if (!startLat && formData.fromLocation) {
                 try {
-                    const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${formData.fromLocation}&limit=1`);
+                    const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${formData.fromLocation}&limit=1&accept-language=en`);
                     if (res.data[0]) { startLat = parseFloat(res.data[0].lat); startLng = parseFloat(res.data[0].lon); }
                 } catch (e) { }
             }
             if (!endLat && formData.toLocation) {
                 try {
-                    const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${formData.toLocation}&limit=1`);
+                    const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${formData.toLocation}&limit=1&accept-language=en`);
                     if (res.data[0]) { endLat = parseFloat(res.data[0].lat); endLng = parseFloat(res.data[0].lon); }
                 } catch (e) { }
             }

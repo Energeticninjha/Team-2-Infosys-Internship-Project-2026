@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import axios from 'axios';
-import { MapPin, Navigation, Clock, Star, Battery, Calendar, CreditCard, ChevronRight, X, User } from 'lucide-react';
+import { MapPin, Navigation, Clock, Star, Battery, Calendar, CreditCard, ChevronRight, X, User, Car } from 'lucide-react';
 
 // Layout & Design System
 import MainLayout from '../Layout/MainLayout';
@@ -14,7 +14,7 @@ import '../../styles/dashboard.css'; // Keep for some map transitions if needed
 // Assets
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-import DriverDetailsModal from './DriverDetailsModal';
+
 import ProfileSection from './ProfileSection';
 
 // --- Leaflet Icons ---
@@ -100,14 +100,20 @@ const CustomerDashboard = ({ logout }) => {
     const [selectedTripResult, setSelectedTripResult] = useState(null);
 
     // URL Param Check (for sidebar navigation)
+    // URL Param Check
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         if (params.get('view') === 'trips') {
-            loadMyTrips();
-        } else {
-            setActiveView('book');
+            setActiveView('trips');
         }
     }, [window.location.search]);
+
+    // Load trips when view changes
+    useEffect(() => {
+        if (activeView === 'trips') {
+            loadMyTrips();
+        }
+    }, [activeView]);
 
     useEffect(() => {
         // Fetch suggestions for dropdown
@@ -265,18 +271,36 @@ const CustomerDashboard = ({ logout }) => {
         if (!selectedRouteId || !selectedVehicle) { alert("Select route and vehicle."); return; }
         const routeObj = routes.find(r => r.id === selectedRouteId);
         try {
+            // Build payload based on whether we have a trip result or not
             const payload = {
                 userId: sessionStorage.getItem('userId') || 1,
                 vehicleId: selectedVehicle.id,
                 startLocation: pickup,
                 endLocation: drop,
-                price: (150 + (selectedVehicle.id || 0) * 10) + (selectedDuration * 125),
                 estimatedTime: routeObj?.duration || "20 mins",
                 routeId: selectedRouteId,
-                scheduledStartTime: `${searchDate}T${searchTime}:00`,
-                durationHours: selectedDuration,
+                scheduledStartTime: bookingTime || `${searchDate}T${searchTime}:00`,
                 passengerCount: parseInt(passengerCount)
             };
+
+            // If booking from a posted trip, include trip and driver details
+            if (selectedTripResult) {
+                payload.tripId = selectedTripResult.trip?.id;
+                payload.driverId = selectedTripResult.driver?.id;
+                payload.price = (selectedTripResult.trip?.pricePerSeat || 150) * parseInt(passengerCount);
+
+                console.log('🎯 Booking with driverId:', payload.driverId, 'from trip:', payload.tripId);
+            } else {
+                // Fallback to old pricing for direct vehicle bookings
+                // Note: For direct vehicle bookings, we need to find the driver from the vehicle
+                // This requires the vehicle to have driver information
+                payload.price = (150 + (selectedVehicle.id || 0) * 10) + (selectedDuration * 125);
+                payload.durationHours = selectedDuration;
+
+                console.warn('⚠️ Direct vehicle booking - driverId may not be set');
+            }
+
+
             const response = await fetch('http://localhost:8083/api/bookings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -286,14 +310,23 @@ const CustomerDashboard = ({ logout }) => {
             if (response.ok) {
                 const bookingData = await response.json();
 
-                if (bookingData.status === 'PENDING' || bookingData.status === 'SCHEDULED') {
+                // For trip-based bookings, always show as PENDING and go to My Trips
+                if (selectedTripResult || bookingData.status === 'PENDING' || bookingData.status === 'SCHEDULED') {
                     alert("✅ Ride Requested! Waiting for Driver to Confirm.");
+                    // Clear search results
                     setRoutes([]);
+                    setTripsResults([]);
+                    setPickup('');
+                    setDrop('');
                     setShowBookingModal(false);
+                    setSelectedTripResult(null);
+                    setSelectedVehicle(null);
+                    // Navigate to My Trips view
                     loadMyTrips();
                     return;
                 }
 
+                // Legacy flow for immediate confirmed bookings
                 setActiveBooking(bookingData);
                 const routeData = {
                     path: routeObj.path,
@@ -309,7 +342,10 @@ const CustomerDashboard = ({ logout }) => {
                 setRoutes([]);
                 setShowBookingModal(false);
             }
-        } catch (error) { }
+        } catch (error) {
+            console.error("Booking error:", error);
+            alert("Failed to create booking. Please try again.");
+        }
     };
 
     const submitReview = async () => {
@@ -492,7 +528,11 @@ const CustomerDashboard = ({ logout }) => {
                                                 <div
                                                     key={res.trip.id}
                                                     className={`p-3 rounded-3 border hover-bg-light cursor-pointer transition-all d-flex align-items-center justify-content-between ${selectedTripResult?.trip.id === res.trip.id ? 'border-primary ring-1' : ''}`}
-                                                    onClick={() => setSelectedTripResult(res)}
+                                                    onClick={() => {
+                                                        setSelectedTripResult(res);
+                                                        setSelectedVehicle(res.vehicle);
+                                                        setShowBookingModal(true);
+                                                    }}
                                                 >
                                                     <div>
                                                         <div className="d-flex align-items-center gap-2">
@@ -581,7 +621,7 @@ const CustomerDashboard = ({ logout }) => {
                                                 <div className="d-flex justify-content-between align-items-start mb-2">
                                                     <div>
                                                         <h6 className="fw-bold mb-1">{trip.startLocation} → {trip.endLocation}</h6>
-                                                        <span className={`badge ${trip.status === 'COMPLETED' ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'}`}>
+                                                        <span className={`badge ${(trip.status === 'COMPLETED' || trip.status === 'CONFIRMED') ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'}`}>
                                                             {trip.status}
                                                         </span>
                                                     </div>
@@ -614,31 +654,215 @@ const CustomerDashboard = ({ logout }) => {
 
                 {/* --- Modals --- */}
                 {showBookingModal && (
-                    <div className="modal-backdrop-glass d-flex align-items-center justify-content-center" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1050, background: 'rgba(0,0,0,0.5)' }}>
-                        <div className="bg-white rounded-4 shadow-lg p-0 overflow-hidden" style={{ width: '400px', maxWidth: '90%' }}>
+                    <div
+                        className="modal-backdrop-glass d-flex align-items-center justify-content-center"
+                        style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            zIndex: 1050,
+                            background: 'rgba(0,0,0,0.5)',
+                            overflowY: 'auto',
+                            padding: '20px 0'
+                        }}
+                    >
+                        <div
+                            className="bg-white rounded-4 shadow-lg"
+                            style={{
+                                width: '700px',
+                                maxWidth: '95%',
+                                margin: 'auto',
+                                maxHeight: 'none'
+                            }}
+                        >
+                            {console.log('🔍 Booking Modal - selectedTripResult:', selectedTripResult)}
+                            {console.log('🔍 Booking Modal - selectedVehicle:', selectedVehicle)}
                             <div className="bg-primary p-4 text-white">
                                 <h5 className="fw-bold mb-0">Confirm Booking</h5>
+                                <small className="text-white-50">Review trip details before confirming</small>
                             </div>
                             <div className="p-4">
-                                <h6 className="fw-bold">{selectedVehicle?.model}</h6>
-                                <div className="text-muted small mb-3">{selectedVehicle?.type} • ₹{150 + (selectedVehicle?.id * 10)} base</div>
+                                {/* Driver & Vehicle Details */}
+                                {(selectedTripResult || selectedVehicle) && (
+                                    <>
+                                        {selectedTripResult?.driver && (
+                                            <div className="mb-4">
+                                                <h6 className="fw-bold mb-3 d-flex align-items-center gap-2">
+                                                    <User size={18} className="text-primary" />
+                                                    Driver Details
+                                                </h6>
+                                                <div className="d-flex align-items-center gap-3 p-3 bg-light rounded-3">
+                                                    <img
+                                                        src={selectedTripResult.driver?.profilePhotoUrl || "https://randomuser.me/api/portraits/men/32.jpg"}
+                                                        className="rounded-circle"
+                                                        width="50"
+                                                        height="50"
+                                                        alt="Driver"
+                                                    />
+                                                    <div className="flex-grow-1">
+                                                        <div className="d-flex align-items-center gap-2">
+                                                            <strong>{selectedTripResult.driver?.name || "Unknown Driver"}</strong>
+                                                            {selectedTripResult.driver?.isOnline ? (
+                                                                <span className="badge bg-success-subtle text-success" style={{ fontSize: '0.65rem' }}>ONLINE</span>
+                                                            ) : (
+                                                                <span className="badge bg-secondary-subtle text-danger" style={{ fontSize: '0.65rem' }}>OFFLINE</span>
+                                                            )}
+                                                        </div>
+                                                        <small className="text-muted">{selectedTripResult.driver?.phone || "N/A"}</small>
+                                                        <div className="d-flex align-items-center gap-1 mt-1">
+                                                            <Star size={14} className="text-warning fill-warning" />
+                                                            <small className="fw-bold">{selectedTripResult.vehicle?.driverRating || '4.8'}</small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
 
-                                <div className="mb-3">
-                                    <label className="form-label small fw-bold text-muted">Schedule</label>
-                                    <input type="datetime-local" className="form-control" value={bookingTime} onChange={e => setBookingTime(e.target.value)} />
-                                </div>
+                                        <div className="mb-4">
+                                            <h6 className="fw-bold mb-3 d-flex align-items-center gap-2">
+                                                <Car size={18} className="text-primary" />
+                                                Vehicle Details
+                                            </h6>
+                                            <div className="p-3 bg-light rounded-3">
+                                                <div className="d-flex justify-content-between align-items-start mb-2">
+                                                    <div>
+                                                        <h6 className="mb-1 fw-bold">{selectedTripResult?.vehicle?.model || selectedVehicle?.model || 'Vehicle'}</h6>
+                                                        <small className="text-muted">{selectedTripResult?.vehicle?.numberPlate || selectedVehicle?.numberPlate || 'N/A'}</small>
+                                                    </div>
+                                                    <div className="d-flex gap-1">
+                                                        <span className="badge bg-white text-secondary border">{selectedTripResult?.vehicle?.type || selectedVehicle?.type || 'Sedan'}</span>
+                                                        {(selectedTripResult?.vehicle?.ev || selectedVehicle?.ev) && <span className="badge bg-success-subtle text-success">EV</span>}
+                                                    </div>
+                                                </div>
+                                                <div className="d-flex gap-3 small text-muted">
+                                                    <span>🪑 {selectedTripResult?.vehicle?.seats || selectedVehicle?.seats || 4} Seats</span>
+                                                    {selectedTripResult?.trip?.pricePerSeat && (
+                                                        <span>💰 ₹{selectedTripResult.trip.pricePerSeat} /seat</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
 
+                                {/* Trip Route Information */}
                                 <div className="mb-4">
-                                    <label className="form-label small fw-bold text-muted d-flex justify-content-between">
-                                        <span>Duration</span>
-                                        <span>{selectedDuration} hrs</span>
-                                    </label>
-                                    <input type="range" className="form-range" min="1" max="12" value={selectedDuration} onChange={e => setSelectedDuration(parseInt(e.target.value))} />
+                                    <h6 className="fw-bold mb-3 d-flex align-items-center gap-2">
+                                        <Navigation size={18} className="text-primary" />
+                                        Trip Route
+                                    </h6>
+                                    <div className="p-3 bg-light rounded-3">
+                                        <div className="d-flex align-items-center gap-3 mb-2">
+                                            <MapPin size={16} className="text-success" />
+                                            <div>
+                                                <small className="text-muted d-block" style={{ fontSize: '0.7rem' }}>PICKUP</small>
+                                                <strong>{pickup}</strong>
+                                            </div>
+                                        </div>
+                                        <div className="ps-2 border-start border-2 border-primary ms-2" style={{ height: '20px' }}></div>
+                                        <div className="d-flex align-items-center gap-3">
+                                            <MapPin size={16} className="text-danger" />
+                                            <div>
+                                                <small className="text-muted d-block" style={{ fontSize: '0.7rem' }}>DROP-OFF</small>
+                                                <strong>{drop}</strong>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
+
+                                {/* Map Preview */}
+                                {selectedRouteId && routes.length > 0 && (
+                                    <div className="mb-4">
+                                        <h6 className="fw-bold mb-2">Route Preview</h6>
+                                        <div style={{ height: '200px', borderRadius: '12px', overflow: 'hidden' }}>
+                                            <MapContainer
+                                                center={pickupCoords || mapCenter}
+                                                zoom={10}
+                                                style={{ height: "100%", width: "100%" }}
+                                                zoomControl={false}
+                                                dragging={false}
+                                                scrollWheelZoom={false}
+                                            >
+                                                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                                                {pickupCoords && <Marker position={pickupCoords}><Popup>Pickup</Popup></Marker>}
+                                                {dropCoords && <Marker position={dropCoords}><Popup>Drop-off</Popup></Marker>}
+                                                {routes.find(r => r.id === selectedRouteId) && (
+                                                    <Polyline
+                                                        positions={routes.find(r => r.id === selectedRouteId).path}
+                                                        pathOptions={{ color: '#0d6efd', weight: 4 }}
+                                                    />
+                                                )}
+                                            </MapContainer>
+                                        </div>
+                                        {routes.find(r => r.id === selectedRouteId) && (
+                                            <div className="d-flex gap-3 mt-2 small text-muted">
+                                                <span>📏 {routes.find(r => r.id === selectedRouteId).distance}</span>
+                                                <span>⏱️ {routes.find(r => r.id === selectedRouteId).duration}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Driver & Vehicle Details */}
+
+
+                                {/* Booking Schedule */}
+                                <div className="mb-3">
+                                    <label className="form-label small fw-bold text-muted d-flex align-items-center gap-2">
+                                        <Clock size={16} />
+                                        Schedule
+                                    </label>
+                                    <input
+                                        type="datetime-local"
+                                        className="form-control"
+                                        value={bookingTime}
+                                        onChange={e => setBookingTime(e.target.value)}
+                                    />
+                                </div>
+
+                                {/* Passenger Count */}
+                                <div className="mb-4">
+                                    <label className="form-label small fw-bold text-muted d-flex align-items-center gap-2">
+                                        <User size={16} />
+                                        Number of Passengers
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="10"
+                                        className="form-control"
+                                        value={passengerCount}
+                                        onChange={e => setPassengerCount(e.target.value)}
+                                    />
+                                </div>
+
+                                {/* Price Summary */}
+                                {selectedTripResult && (
+                                    <div className="p-3 bg-primary bg-opacity-10 rounded-3 mb-4">
+                                        <div className="d-flex justify-content-between mb-2">
+                                            <span className="text-muted">Price per seat:</span>
+                                            <span className="fw-bold">₹{selectedTripResult.trip?.pricePerSeat || 150}</span>
+                                        </div>
+                                        <div className="d-flex justify-content-between mb-2">
+                                            <span className="text-muted">Passengers:</span>
+                                            <span className="fw-bold">× {passengerCount}</span>
+                                        </div>
+                                        <hr className="my-2" />
+                                        <div className="d-flex justify-content-between">
+                                            <span className="fw-bold">Total Amount:</span>
+                                            <span className="fw-bold text-primary fs-5">₹{(selectedTripResult.trip?.pricePerSeat || 150) * passengerCount}</span>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="d-flex gap-2">
-                                    <Button variant="ghost" className="flex-fill" onClick={() => setShowBookingModal(false)}>Cancel</Button>
-                                    <Button className="flex-fill" onClick={confirmBooking}>Book Ride</Button>
+                                    <Button variant="ghost" className="flex-fill" onClick={() => {
+                                        setShowBookingModal(false);
+                                        setSelectedTripResult(null);
+                                    }}>Cancel</Button>
+                                    <Button className="flex-fill" onClick={confirmBooking}>Confirm Booking</Button>
                                 </div>
                             </div>
                         </div>
@@ -678,9 +902,7 @@ const CustomerDashboard = ({ logout }) => {
                     </div>
                 )}
 
-                {selectedTripResult && (
-                    <DriverDetailsModal result={selectedTripResult} onClose={() => setSelectedTripResult(null)} />
-                )}
+
 
             </div>
         </MainLayout>

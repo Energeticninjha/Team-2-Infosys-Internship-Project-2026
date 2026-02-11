@@ -34,11 +34,15 @@ public class Booking {
     private LocalDateTime scheduledStartTime;
     private LocalDateTime endTime;
 
-    private String status; // CONFIRMED, COMPLETED, CANCELLED
+    private String status; // PENDING, CONFIRMED, COMPLETED, CANCELLED
     private Double amount;
 
     private String review;
     private Double rating;
 
     private Integer passengerCount; // Added field
+
+    // Trip-based booking fields
+    private Long tripId; // Reference to the Trip that was booked
+    private Long driverId; // Driver who posted the trip
 }
