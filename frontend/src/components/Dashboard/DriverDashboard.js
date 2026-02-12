@@ -332,7 +332,10 @@ const DriverDashboard = ({ logout }) => {
             fetchBaseData();
             setVehicle({ ...newVehicle, status: 'Pending' });
             setShowRegister(false);
-        } catch (e) { alert("Registration failed."); }
+        } catch (e) {
+            console.error("Registration failed:", e);
+            alert("Registration failed: " + (e.response?.data?.message || e.message));
+        }
     };
 
     const startTrip = async () => {

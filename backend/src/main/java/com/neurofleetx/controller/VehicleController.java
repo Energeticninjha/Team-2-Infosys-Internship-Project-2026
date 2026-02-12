@@ -53,7 +53,7 @@ public class VehicleController {
         // Set all other vehicles for this driver to "Inactive" (or archived)
         if (vehicle.getDriverName() != null) {
             List<Vehicle> existing = vehicleRepo.findAll().stream()
-                    .filter(v -> v.getDriverName().equalsIgnoreCase(vehicle.getDriverName()))
+                    .filter(v -> vehicle.getDriverName().equalsIgnoreCase(v.getDriverName()))
                     .toList();
             for (Vehicle v : existing) {
                 v.setStatus("Inactive");
