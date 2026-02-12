@@ -98,7 +98,24 @@ public class VehicleController {
         return vehicleRepo.findById(id).map(vehicle -> {
             // Update fields that are provided
             if (vehicleUpdates.getStatus() != null) {
+                String oldStatus = vehicle.getStatus();
                 vehicle.setStatus(vehicleUpdates.getStatus());
+
+                // AUTO-FIX LOGIC:
+                // If the vehicle was in "Maintenance" and is now being set to "Active" (or
+                // related),
+                // we trigger the health reset.
+                if ("Maintenance".equalsIgnoreCase(oldStatus) &&
+                        ("Active".equalsIgnoreCase(vehicleUpdates.getStatus())
+                                || "Available".equalsIgnoreCase(vehicleUpdates.getStatus()))) {
+                    // Apply health reset directly to the entity to avoid race condition/overwrite
+                    vehicle.setEngineHealth(100.0);
+                    vehicle.setTireWear(0.0);
+                    vehicle.setBatteryHealth(100.0);
+                    vehicle.setTirePressure(32.0);
+                    vehicle.setFuelPercent(100);
+                    vehicle.setNextMaintenanceDate(java.time.LocalDateTime.now().plusMonths(3));
+                }
 
                 // SYNC Driver Online Status with Vehicle Status
                 if (vehicle.getDriverEmail() != null) {
@@ -165,6 +182,7 @@ public class VehicleController {
 
             return saved;
         }).orElseThrow(() -> new RuntimeException("Vehicle not found"));
+
     }
 
     @GetMapping("/live")
@@ -233,6 +251,12 @@ public class VehicleController {
     public ResponseEntity<String> resetVehicleHealth(@PathVariable Long id) {
         maintenanceService.resetHealth(id);
         return ResponseEntity.ok("Vehicle health reset successfully");
+    }
+
+    @PutMapping("/maintenance/schedule/{id}")
+    public ResponseEntity<String> scheduleMaintenance(@PathVariable Long id) {
+        maintenanceService.scheduleMaintenance(id);
+        return ResponseEntity.ok("Vehicle scheduled for maintenance");
     }
 
     @GetMapping("/telemetry/export")

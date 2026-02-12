@@ -86,6 +86,10 @@ public class VehicleSimulationService {
             vehicle.setEngineHealth(Math.max(0, vehicle.getEngineHealth() - (0.01 + Math.random() * 0.04)));
             vehicle.setBatteryHealth(Math.max(0, vehicle.getBatteryHealth() - (0.02 + Math.random() * 0.03)));
             vehicle.setTireWear(Math.min(100, vehicle.getTireWear() + (0.01 + Math.random() * 0.02)));
+            // Simulate Fuel Consumption (0.5% - 1.5% per update while moving)
+            if (vehicle.getFuelPercent() != null) {
+                vehicle.setFuelPercent((int) Math.max(0, vehicle.getFuelPercent() - (0.5 + Math.random() * 1.0)));
+            }
 
             // Update Tire Pressure (Simulate slight drops)
             if (Math.random() > 0.95) {
@@ -127,6 +131,8 @@ public class VehicleSimulationService {
                 v.setTirePressure(32.0);
             if (v.getOdometer() == null)
                 v.setOdometer(0.0);
+            if (v.getFuelPercent() == null)
+                v.setFuelPercent(100);
 
             boolean isOnTrip = activeTrips.containsKey(v.getId());
 
@@ -146,6 +152,11 @@ public class VehicleSimulationService {
                 // Engine health stays stable when idle (very minimal degradation)
                 if (Math.random() > 0.98) {
                     v.setEngineHealth(Math.max(0, v.getEngineHealth() - 0.001));
+                }
+
+                // Fuel evaporation/idle consumption (very minimal)
+                if (Math.random() > 0.99) { // 1% chance every 30s
+                    v.setFuelPercent(Math.max(0, v.getFuelPercent() - 1));
                 }
 
                 // Tire wear doesn't increase when idle

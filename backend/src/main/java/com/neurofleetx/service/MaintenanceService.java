@@ -106,13 +106,27 @@ public class MaintenanceService {
         return Math.min(Math.min(engineDays, tireDays), Math.min(batteryDays, odometerDays));
     }
 
+    public void scheduleMaintenance(Long vehicleId) {
+        vehicleRepo.findById(vehicleId).ifPresent(v -> {
+            v.setStatus("Maintenance");
+            vehicleRepo.save(v);
+            System.out.println("🗓️ Vehicle " + vehicleId + " scheduled for maintenance.");
+        });
+    }
+
     public void resetHealth(Long vehicleId) {
         vehicleRepo.findById(vehicleId).ifPresent(v -> {
             v.setEngineHealth(100.0);
             v.setTireWear(0.0);
             v.setBatteryHealth(100.0);
             v.setTirePressure(32.0);
-            v.setStatus("Active");
+            v.setFuelPercent(100);
+
+            // Only set to Active if not already Inactive/Offline
+            if (!"Inactive".equalsIgnoreCase(v.getStatus())) {
+                v.setStatus("Active");
+            }
+
             v.setNextMaintenanceDate(LocalDateTime.now().plusMonths(3));
             vehicleRepo.save(v);
             System.out.println("🛠️ Vehicle " + vehicleId + " health reset completed.");
