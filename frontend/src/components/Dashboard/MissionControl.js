@@ -10,6 +10,7 @@ const MissionControl = () => {
     const [pendingRequests, setPendingRequests] = useState([]);
     const [activeJobs, setActiveJobs] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [popupInfo, setPopupInfo] = useState({ show: false, message: '', type: 'success' });
 
     const fetchPendingRequests = async () => {
         if (!driverId) return;
@@ -48,11 +49,11 @@ const MissionControl = () => {
         setLoading(true);
         try {
             await axios.put(`http://localhost:8083/api/bookings/${bookingId}/accept`);
-            alert('✅ Job Accepted! The customer has been notified.');
+            setPopupInfo({ show: true, message: '✅ Job Accepted! The customer has been notified.', type: 'success' });
             fetchPendingRequests();
             fetchActiveJobs();
         } catch (e) {
-            alert('Failed to accept job. Please try again.');
+            setPopupInfo({ show: true, message: 'Failed to accept job. Please try again.', type: 'error' });
             console.error(e);
         } finally {
             setLoading(false);
@@ -275,6 +276,22 @@ const MissionControl = () => {
                             ))}
                         </div>
                     )}
+                </div>
+            )}
+            {popupInfo.show && (
+                <div className="modal-backdrop-glass position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1100, background: 'rgba(0,0,0,0.5)' }}>
+                    <Card className="shadow-lg p-4 text-center" style={{ maxWidth: '400px' }}>
+                        <h4 className={`mb-3 ${popupInfo.type === 'error' ? 'text-danger' : 'text-success'}`}>
+                            {popupInfo.type === 'error' ? 'Error' : 'Success'}
+                        </h4>
+                        <p className="mb-4">{popupInfo.message}</p>
+                        <Button
+                            onClick={() => setPopupInfo({ ...popupInfo, show: false })}
+                            variant={popupInfo.type === 'error' ? 'danger' : 'primary'}
+                        >
+                            OK
+                        </Button>
+                    </Card>
                 </div>
             )}
         </div>

@@ -16,6 +16,7 @@ const HealthAnalytics = () => {
     const [healthTrends, setHealthTrends] = useState(null);
     const [viewMode, setViewMode] = useState('grid');
     const [filter, setFilter] = useState('ALL'); // 'ALL', 'GOOD', 'MODERATE', 'CRITICAL', 'MAINTENANCE'
+    const [popupInfo, setPopupInfo] = useState({ show: false, message: '', type: 'success' });
 
     useEffect(() => {
         const fetchData = async () => {
@@ -99,11 +100,11 @@ const HealthAnalytics = () => {
             if (isCritical) {
                 // If critical, manager sends it to maintenance (status change only)
                 await axios.put(`http://localhost:8083/api/vehicles/maintenance/schedule/${id}`);
-                alert("Vehicle Scheduled for Maintenance. Driver notified.");
+                setPopupInfo({ show: true, message: "Vehicle Scheduled for Maintenance. Driver notified.", type: 'success' });
             } else {
                 // If just scheduling, also send to maintenance mode
                 await axios.put(`http://localhost:8083/api/vehicles/maintenance/schedule/${id}`);
-                alert("Maintenance Scheduled.");
+                setPopupInfo({ show: true, message: "Maintenance Scheduled.", type: 'success' });
             }
             // Trigger refresh
             const res = await axios.get('http://localhost:8083/api/vehicles');
@@ -351,6 +352,23 @@ ${(vehicle.engineHealth < 30 || vehicle.tireWear > 80 || vehicle.batteryHealth <
                     </div>
                 )}
             </Card >
+
+            {popupInfo.show && (
+                <div className="modal-backdrop-glass position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1100, background: 'rgba(0,0,0,0.5)' }}>
+                    <Card className="shadow-lg p-4 text-center" style={{ maxWidth: '400px' }}>
+                        <h4 className={`mb-3 ${popupInfo.type === 'error' ? 'text-danger' : 'text-success'}`}>
+                            {popupInfo.type === 'error' ? 'Error' : 'Success'}
+                        </h4>
+                        <p className="mb-4">{popupInfo.message}</p>
+                        <Button
+                            onClick={() => setPopupInfo({ ...popupInfo, show: false })}
+                            variant={popupInfo.type === 'error' ? 'danger' : 'primary'}
+                        >
+                            OK
+                        </Button>
+                    </Card>
+                </div>
+            )}
         </div >
     );
 };

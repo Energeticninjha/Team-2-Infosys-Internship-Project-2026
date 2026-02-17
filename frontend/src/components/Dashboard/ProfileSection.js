@@ -10,6 +10,7 @@ const ProfileSection = ({ userId }) => {
     const [photoFile, setPhotoFile] = useState(null);
     const [photoPreview, setPhotoPreview] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [popupInfo, setPopupInfo] = useState({ show: false, message: '', type: 'success' });
 
     useEffect(() => {
         const uid = userId || sessionStorage.getItem('userId');
@@ -63,8 +64,7 @@ const ProfileSection = ({ userId }) => {
             }
 
             await axios.put(`http://localhost:8083/api/users/${user.id}`, updates);
-
-            alert("Profile updated successfully!");
+            setPopupInfo({ show: true, message: "Profile updated successfully!", type: 'success' });
             setEditMode(false);
             fetchUserProfile(user.id);
 
@@ -74,7 +74,7 @@ const ProfileSection = ({ userId }) => {
             }
         } catch (error) {
             console.error("Failed to update profile", error);
-            alert("Failed to update profile. Please try again.");
+            setPopupInfo({ show: true, message: "Failed to update profile. Please try again.", type: 'error' });
         }
     };
 
@@ -217,6 +217,22 @@ const ProfileSection = ({ userId }) => {
                     </div>
                 </Card>
             </div>
+            {popupInfo.show && (
+                <div className="modal-backdrop-glass position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1100, background: 'rgba(0,0,0,0.5)' }}>
+                    <Card className="shadow-lg p-4 text-center" style={{ maxWidth: '400px' }}>
+                        <h4 className={`mb-3 ${popupInfo.type === 'error' ? 'text-danger' : 'text-success'}`}>
+                            {popupInfo.type === 'error' ? 'Error' : 'Success'}
+                        </h4>
+                        <p className="mb-4">{popupInfo.message}</p>
+                        <Button
+                            onClick={() => setPopupInfo({ ...popupInfo, show: false })}
+                            variant={popupInfo.type === 'error' ? 'danger' : 'primary'}
+                        >
+                            OK
+                        </Button>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 };

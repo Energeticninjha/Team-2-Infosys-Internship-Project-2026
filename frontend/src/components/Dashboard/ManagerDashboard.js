@@ -41,6 +41,7 @@ const ManagerDashboard = ({ logout }) => {
     const [selectedDriver, setSelectedDriver] = useState(null);
     const [selectedVehicle, setSelectedVehicle] = useState(null);
     const [selectedDocs, setSelectedDocs] = useState(null);
+    const [popupInfo, setPopupInfo] = useState({ show: false, message: '', type: 'success' });
 
     // New states for enhancements
     const [searchQuery, setSearchQuery] = useState('');
@@ -58,8 +59,10 @@ const ManagerDashboard = ({ logout }) => {
             await axios.put(`http://localhost:8083/api/vehicles/${id}`, { status, documentStatus: docStatus });
             const vRes = await axios.get('http://localhost:8083/api/vehicles');
             setVehicles(vRes.data || []);
-            alert(`Vehicle status updated to ${status}`);
-        } catch (error) { alert("Failed to update status"); }
+            setPopupInfo({ show: true, message: `Vehicle status updated to ${status}`, type: 'success' });
+        } catch (error) {
+            setPopupInfo({ show: true, message: "Failed to update status", type: 'error' });
+        }
     };
 
     const updateVehicleDocs = async (id, status) => {
@@ -68,8 +71,10 @@ const ManagerDashboard = ({ logout }) => {
             const vRes = await axios.get('http://localhost:8083/api/vehicles');
             setVehicles(vRes.data || []);
             setSelectedDocs(null);
-            alert("Documents Verified");
-        } catch (error) { alert("Failed to verify documents"); }
+            setPopupInfo({ show: true, message: "Documents Verified", type: 'success' });
+        } catch (error) {
+            setPopupInfo({ show: true, message: "Failed to verify documents", type: 'error' });
+        }
     }
 
     const exportTelemetryCSV = async () => {
@@ -84,10 +89,10 @@ const ManagerDashboard = ({ logout }) => {
             document.body.appendChild(link);
             link.click();
             link.remove();
-            alert('Telemetry data exported successfully!');
+            setPopupInfo({ show: true, message: 'Telemetry data exported successfully!', type: 'success' });
         } catch (error) {
             console.error('Export failed:', error);
-            alert('Failed to export telemetry data');
+            setPopupInfo({ show: true, message: 'Failed to export telemetry data', type: 'error' });
         }
     };
 
@@ -589,6 +594,23 @@ const ManagerDashboard = ({ logout }) => {
                     </div>
                 )
                 }
+
+                {popupInfo.show && (
+                    <div className="modal-backdrop-glass position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1100, background: 'rgba(0,0,0,0.5)' }}>
+                        <Card className="shadow-lg p-4 text-center" style={{ maxWidth: '400px' }}>
+                            <h4 className={`mb-3 ${popupInfo.type === 'error' ? 'text-danger' : 'text-success'}`}>
+                                {popupInfo.type === 'error' ? 'Error' : 'Success'}
+                            </h4>
+                            <p className="mb-4">{popupInfo.message}</p>
+                            <Button
+                                onClick={() => setPopupInfo({ ...popupInfo, show: false })}
+                                variant={popupInfo.type === 'error' ? 'danger' : 'primary'}
+                            >
+                                OK
+                            </Button>
+                        </Card>
+                    </div>
+                )}
 
                 {
                     activeView === 'assignments' && (

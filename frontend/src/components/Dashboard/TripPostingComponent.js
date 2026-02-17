@@ -14,15 +14,40 @@ const TripPostingComponent = ({ vehicle, onTripPosted }) => {
     const [suggestions, setSuggestions] = useState([]);
     const [activeField, setActiveField] = useState(null);
 
-    const handleLocationSearch = async (query, field) => {
-        setFormData({ ...formData, [field]: query });
-        if (query.length > 2) {
-            try {
-                const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&countrycodes=in&limit=5&accept-language=en`);
-                setSuggestions(res.data);
-                setActiveField(field);
-            } catch (e) { console.error("Geocoding error", e); }
-        } else { setSuggestions([]); }
+    // Debounce utility
+    const debounce = (func, wait) => {
+        let timeout;
+        return (...args) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func(...args), wait);
+        };
+    };
+
+    const [isSearching, setIsSearching] = useState(false);
+
+    // Debounced API Fetch
+    const fetchSuggestions = React.useCallback(debounce(async (query, field) => {
+        if (!query || query.length <= 2) {
+            setSuggestions([]);
+            return;
+        }
+        setIsSearching(true);
+        try {
+            // Added explicit strict generic user-agent-like param or just polite delay
+            const res = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=in&limit=5&accept-language=en`);
+            setSuggestions(res.data);
+            setActiveField(field);
+        } catch (e) {
+            console.error("Geocoding error", e);
+            setSuggestions([]); // Clear on error to avoid broken UI
+        } finally {
+            setIsSearching(false);
+        }
+    }, 800), []); // 800ms debounce to be very safe against rate limits
+
+    const handleLocationSearch = (query, field) => {
+        setFormData(prev => ({ ...prev, [field]: query }));
+        fetchSuggestions(query, field);
     };
 
     const selectSuggestion = (suggestion) => {

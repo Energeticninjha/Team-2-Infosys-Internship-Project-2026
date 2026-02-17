@@ -2,9 +2,12 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Rocket, Mail, Lock, User, Eye, EyeOff, ArrowLeft, CheckCircle } from 'lucide-react';
+import Card from '../Common/Card';
+import Button from '../Common/Button';
 
 const Register = ({ updateToken, setRole }) => {
     const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+    const [popupInfo, setPopupInfo] = useState({ show: false, message: '', type: 'success' });
     const [showPassword, setShowPassword] = useState(false);
     const [selectedRole, setSelectedRole] = useState('');
     const [error, setError] = useState('');
@@ -21,8 +24,7 @@ const Register = ({ updateToken, setRole }) => {
             const response = await axios.post('http://localhost:8083/api/auth/register', payload);
 
             if (response.status === 200 || response.data) {
-                alert("Registration Successful! Please Login.");
-                navigate('/login');
+                setPopupInfo({ show: true, message: "Registration Successful! Please Login.", type: 'success' });
             }
         } catch (err) {
             console.error(err);
@@ -157,6 +159,25 @@ const Register = ({ updateToken, setRole }) => {
                     </div>
                 </div>
             </div>
+            {popupInfo.show && (
+                <div className="modal-backdrop-glass position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1100, background: 'rgba(0,0,0,0.5)' }}>
+                    <Card className="shadow-lg p-4 text-center" style={{ maxWidth: '400px' }}>
+                        <h4 className={`mb-3 ${popupInfo.type === 'error' ? 'text-danger' : 'text-success'}`}>
+                            {popupInfo.type === 'error' ? 'Error' : 'Success'}
+                        </h4>
+                        <p className="mb-4">{popupInfo.message}</p>
+                        <Button
+                            onClick={() => {
+                                setPopupInfo({ ...popupInfo, show: false });
+                                if (popupInfo.type === 'success') navigate('/login');
+                            }}
+                            variant={popupInfo.type === 'error' ? 'danger' : 'primary'}
+                        >
+                            OK
+                        </Button>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 };

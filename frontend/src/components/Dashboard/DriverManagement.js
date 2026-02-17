@@ -33,6 +33,12 @@ const DriverManagement = () => {
         name: '', model: '', numberPlate: '', driverName: '', driverEmail: '', driverContact: '', type: 'SUV', seats: 4, ev: false
     });
 
+    const [alertPopup, setAlertPopup] = useState(null); // { message, type, onOk }
+
+    const triggerAlert = (message, type = 'success', onOk = null) => {
+        setAlertPopup({ message, type, onOk });
+    };
+
     useEffect(() => { fetchDrivers(); }, []);
 
     const fetchDrivers = async () => {
@@ -57,7 +63,7 @@ const DriverManagement = () => {
         if (lat && lng) {
             setMapLocation({ lat, lng, name: driver.name, vehicle: driver.vehicleId });
             setShowMapModal(true);
-        } else { alert("Driver location not available yet."); }
+        } else { triggerAlert("Driver location not available yet.", "error"); }
     };
 
     const fetchDriverDetails = async (driverId) => {
@@ -66,46 +72,48 @@ const DriverManagement = () => {
             setDriverDetails(response.data);
             setSelectedDriver(response.data.driver);
             setShowDriverDetails(true);
-        } catch (error) { alert('Failed to fetch driver details'); }
+        } catch (error) { triggerAlert('Failed to fetch driver details', 'error'); }
     };
 
     const blockDriver = async (driverId) => {
         try {
             await axios.put(`http://localhost:8083/api/manager/drivers/${driverId}/block`);
-            alert('Driver blocked successfully');
+            triggerAlert('Driver blocked successfully', 'success');
             fetchDrivers();
             if (showDriverDetails) fetchDriverDetails(driverId);
-        } catch (error) { alert('Failed to block driver'); }
+        } catch (error) { triggerAlert('Failed to block driver', 'error'); }
     };
 
     const unblockDriver = async (driverId) => {
         try {
             await axios.put(`http://localhost:8083/api/manager/drivers/${driverId}/unblock`);
-            alert('Driver unblocked successfully');
+            triggerAlert('Driver unblocked successfully', 'success');
             fetchDrivers();
             if (showDriverDetails) fetchDriverDetails(driverId);
-        } catch (error) { alert('Failed to unblock driver'); }
+        } catch (error) { triggerAlert('Failed to unblock driver', 'error'); }
     };
 
     const handleAddDriver = async (e) => {
         e.preventDefault();
         try {
             await axios.post('http://localhost:8083/api/manager/drivers/add', newDriver);
-            alert('Driver added successfully!');
-            setShowAddDriver(false);
-            setNewDriver({ name: '', email: '', password: '', phone: '', licenseNumber: '' });
-            fetchDrivers();
-        } catch (error) { alert(error.response?.data?.error || 'Failed to add driver'); }
+            triggerAlert('Driver added successfully!', 'success', () => {
+                setShowAddDriver(false);
+                setNewDriver({ name: '', email: '', password: '', phone: '', licenseNumber: '' });
+                fetchDrivers();
+            });
+        } catch (error) { triggerAlert(error.response?.data?.error || 'Failed to add driver', 'error'); }
     };
 
     const handleAddVehicle = async (e) => {
         e.preventDefault();
         try {
             await axios.post('http://localhost:8083/api/manager/vehicles/add', newVehicle);
-            alert('Vehicle added successfully!');
-            setShowAddVehicle(false);
-            setNewVehicle({ name: '', model: '', numberPlate: '', driverName: '', driverEmail: '', driverContact: '', type: 'SUV', seats: 4, ev: false });
-        } catch (error) { alert('Failed to add vehicle'); }
+            triggerAlert('Vehicle added successfully!', 'success', () => {
+                setShowAddVehicle(false);
+                setNewVehicle({ name: '', model: '', numberPlate: '', driverName: '', driverEmail: '', driverContact: '', type: 'SUV', seats: 4, ev: false });
+            });
+        } catch (error) { triggerAlert('Failed to add vehicle', 'error'); }
     };
 
     const [viewLicenseUrl, setViewLicenseUrl] = useState(null);
@@ -292,6 +300,28 @@ const DriverManagement = () => {
                             </form>
                         )}
 
+                    </Card>
+                </div>
+            )}
+
+            {/* Custom Alert Popup */}
+            {alertPopup && (
+                <div className="modal-backdrop-glass position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 2000, background: 'rgba(0,0,0,0.6)' }}>
+                    <Card className="text-center p-4 shadow-lg animate-fade-in" style={{ maxWidth: '400px', width: '90%' }}>
+                        <div className={`mb-3 display-4 ${alertPopup.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                            {alertPopup.type === 'success' ? '✅' : '⚠️'}
+                        </div>
+                        <h5 className="mb-4 fw-bold">{alertPopup.message}</h5>
+                        <Button
+                            variant={alertPopup.type === 'success' ? 'success' : 'danger'}
+                            className="w-100"
+                            onClick={() => {
+                                setAlertPopup(null);
+                                if (alertPopup.onOk) alertPopup.onOk();
+                            }}
+                        >
+                            OK
+                        </Button>
                     </Card>
                 </div>
             )}

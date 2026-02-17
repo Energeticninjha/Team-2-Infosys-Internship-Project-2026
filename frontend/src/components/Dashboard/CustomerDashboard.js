@@ -98,6 +98,7 @@ const CustomerDashboard = ({ logout }) => {
     const [travelSuggestions, setTravelSuggestions] = useState([]);
     const [tripsResults, setTripsResults] = useState([]);
     const [selectedTripResult, setSelectedTripResult] = useState(null);
+    const [popupInfo, setPopupInfo] = useState({ show: false, message: '', type: 'success' });
 
     // URL Param Check (for sidebar navigation)
     // URL Param Check
@@ -212,7 +213,7 @@ const CustomerDashboard = ({ logout }) => {
         try {
             const pLoc = await geocode(pickup);
             const dLoc = await geocode(drop);
-            if (!pLoc || !dLoc) { alert("Location not found."); setLoading(false); return; }
+            if (!pLoc || !dLoc) { setPopupInfo({ show: true, message: "Location not found.", type: 'error' }); setLoading(false); return; }
 
             setPickupCoords([pLoc.lat, pLoc.lon]);
             setDropCoords([dLoc.lat, dLoc.lon]);
@@ -256,7 +257,7 @@ const CustomerDashboard = ({ logout }) => {
 
         } catch (error) {
             console.error("Search Error:", error);
-            alert("Error searching for rides.");
+            setPopupInfo({ show: true, message: "Error searching for rides.", type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -268,7 +269,7 @@ const CustomerDashboard = ({ logout }) => {
     };
 
     const confirmBooking = async () => {
-        if (!selectedRouteId || !selectedVehicle) { alert("Select route and vehicle."); return; }
+        if (!selectedRouteId || !selectedVehicle) { setPopupInfo({ show: true, message: "Select route and vehicle.", type: 'error' }); return; }
         const routeObj = routes.find(r => r.id === selectedRouteId);
         try {
             // Build payload based on whether we have a trip result or not
@@ -312,7 +313,7 @@ const CustomerDashboard = ({ logout }) => {
 
                 // For trip-based bookings, always show as PENDING and go to My Trips
                 if (selectedTripResult || bookingData.status === 'PENDING' || bookingData.status === 'SCHEDULED') {
-                    alert("✅ Ride Requested! Waiting for Driver to Confirm.");
+                    setPopupInfo({ show: true, message: "✅ Ride Requested! Waiting for Driver to Confirm.", type: 'success' });
                     // Clear search results
                     setRoutes([]);
                     setTripsResults([]);
@@ -344,7 +345,7 @@ const CustomerDashboard = ({ logout }) => {
             }
         } catch (error) {
             console.error("Booking error:", error);
-            alert("Failed to create booking. Please try again.");
+            setPopupInfo({ show: true, message: "Failed to create booking. Please try again.", type: 'error' });
         }
     };
 
@@ -362,7 +363,7 @@ const CustomerDashboard = ({ logout }) => {
             setPersistentRoute(null);
             setShowReviewModal(false);
             setPickup(''); setDrop('');
-            alert("Thanks for your review!");
+            setPopupInfo({ show: true, message: "Thanks for your review!", type: 'success' });
         } catch (e) { console.error(e); }
     };
 
@@ -374,7 +375,7 @@ const CustomerDashboard = ({ logout }) => {
             setMyTrips(res.data.sort((a, b) => b.id - a.id));
             setActiveView('trips');
         } catch (e) {
-            alert("Failed to load trips.");
+            setPopupInfo({ show: true, message: "Failed to load trips.", type: 'error' });
         }
     };
 
@@ -438,7 +439,7 @@ const CustomerDashboard = ({ logout }) => {
                 {activeView === 'book' && (
                     <div className="position-absolute top-0 start-0 h-100 p-3 overflow-hidden d-none d-md-block" style={{ width: '420px', zIndex: 10 }}>
                         <Card className="h-100 d-flex flex-column shadow-lg border-0" noPadding>
-                            <div className="p-4 flex-column h-100 overflow-auto">
+                            <div className="p-4 d-flex flex-column h-100 overflow-auto">
                                 <h4 className="fw-bold mb-4">Where to today?</h4>
 
                                 {/* Search Form */}
@@ -905,7 +906,25 @@ const CustomerDashboard = ({ logout }) => {
 
 
             </div>
-        </MainLayout>
+            {
+                popupInfo.show && (
+                    <div className="modal-backdrop-glass position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1100, background: 'rgba(0,0,0,0.5)' }}>
+                        <Card className="shadow-lg p-4 text-center" style={{ maxWidth: '400px' }}>
+                            <h4 className={`mb-3 ${popupInfo.type === 'error' ? 'text-danger' : 'text-success'}`}>
+                                {popupInfo.type === 'error' ? 'Error' : 'Success'}
+                            </h4>
+                            <p className="mb-4">{popupInfo.message}</p>
+                            <Button
+                                onClick={() => setPopupInfo({ ...popupInfo, show: false })}
+                                variant={popupInfo.type === 'error' ? 'danger' : 'primary'}
+                            >
+                                OK
+                            </Button>
+                        </Card>
+                    </div>
+                )
+            }
+        </MainLayout >
     );
 };
 

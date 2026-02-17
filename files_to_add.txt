@@ -1,0 +1,12 @@
+frontend/src/components/Auth/Register.js
+frontend/src/components/Common/Card.js
+frontend/src/components/Dashboard/AdminDashboard.js
+frontend/src/components/Dashboard/CustomerDashboard.js
+frontend/src/components/Dashboard/DriverDashboard.js
+frontend/src/components/Dashboard/DriverManagement.js
+frontend/src/components/Dashboard/HealthAnalytics.js
+frontend/src/components/Dashboard/ManagerDashboard.js
+frontend/src/components/Dashboard/MissionControl.js
+frontend/src/components/Dashboard/ProfileSection.js
+frontend/src/components/Dashboard/TripPostingComponent.js
+files_to_add.txt

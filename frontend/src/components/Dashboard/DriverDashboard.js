@@ -40,6 +40,7 @@ const DriverDashboard = ({ logout }) => {
     const driverId = sessionStorage.getItem('userId');
     const [driverEmail] = useState(sessionStorage.getItem('email'));
     const [activeView, setActiveView] = useState('dashboard');
+    const [popupInfo, setPopupInfo] = useState({ show: false, message: '', type: 'success' });
 
     // Vehicle State
     const [vehicle, setVehicle] = useState(null);
@@ -240,8 +241,9 @@ const DriverDashboard = ({ logout }) => {
             fetchBaseData(); // Refresh vehicle status
             checkBookings(); // Refresh bookings
             setActiveView('mission');
-            alert("Job Accepted! Proceed to mission.");
-        } catch (e) { alert("Failed to accept job."); }
+
+            setPopupInfo({ show: true, message: "Job Accepted! Proceed to mission.", type: 'success' });
+        } catch (e) { setPopupInfo({ show: true, message: "Failed to accept job.", type: 'error' }); }
     };
 
     const handleStatusChange = async (newStatus) => {
@@ -272,7 +274,7 @@ const DriverDashboard = ({ logout }) => {
             fetchBaseData();
         } catch (error) {
             console.error("Status update failed", error);
-            alert("Failed to update status.");
+            setPopupInfo({ show: true, message: "Failed to update status.", type: 'error' });
         }
     };
 
@@ -328,13 +330,13 @@ const DriverDashboard = ({ logout }) => {
             };
 
             await axios.post('http://localhost:8083/api/vehicles', newVehicle);
-            alert(isFirstVehicle ? "Vehicle Registration Submitted!" : "New Vehicle Added!");
+            setPopupInfo({ show: true, message: isFirstVehicle ? "Vehicle Registration Submitted!" : "New Vehicle Added!", type: 'success' });
             fetchBaseData();
             setVehicle({ ...newVehicle, status: 'Pending' });
             setShowRegister(false);
         } catch (e) {
             console.error("Registration failed:", e);
-            alert("Registration failed: " + (e.response?.data?.message || e.message));
+            setPopupInfo({ show: true, message: "Registration failed: " + (e.response?.data?.message || e.message), type: 'error' });
         }
     };
 
@@ -370,7 +372,7 @@ const DriverDashboard = ({ logout }) => {
                     });
                 }, 2000);
             }
-        } catch (e) { alert("System Busy: Could not fetch optimized path."); }
+        } catch (e) { setPopupInfo({ show: true, message: "System Busy: Could not fetch optimized path.", type: 'error' }); }
     };
 
     const completeTrip = async () => {
@@ -386,8 +388,8 @@ const DriverDashboard = ({ logout }) => {
             await axios.put(`http://localhost:8083/api/vehicles/driver/${sessionStorage.getItem('name')}/status`, { status: "Active" });
             setVehicle(prev => ({ ...prev, status: 'Active' }));
             setActiveView('dashboard');
-            alert("Trip Completed Successfully!");
-        } catch (e) { alert("Failed to complete trip."); }
+            setPopupInfo({ show: true, message: "Trip Completed Successfully!", type: 'success' });
+        } catch (e) { setPopupInfo({ show: true, message: "Failed to complete trip.", type: 'error' }); }
     };
 
     const reRequestVehicle = async () => {
@@ -395,8 +397,8 @@ const DriverDashboard = ({ logout }) => {
             const updated = { ...vehicle, status: 'Pending' };
             await axios.post('http://localhost:8083/api/vehicles', updated);
             setVehicle(updated);
-            alert("Re-request submitted.");
-        } catch (e) { alert("Failed to re-request."); }
+            setPopupInfo({ show: true, message: "Re-request submitted.", type: 'success' });
+        } catch (e) { setPopupInfo({ show: true, message: "Failed to re-request.", type: 'error' }); }
     };
 
     return (
@@ -582,6 +584,23 @@ const DriverDashboard = ({ logout }) => {
 
 
             {activeView === 'profile' && <div className="p-4"><ProfileSection userId={sessionStorage.getItem('userId')} /></div>}
+
+            {popupInfo.show && (
+                <div className="modal-backdrop-glass position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1100, background: 'rgba(0,0,0,0.5)' }}>
+                    <Card className="shadow-lg p-4 text-center" style={{ maxWidth: '400px' }}>
+                        <h4 className={`mb-3 ${popupInfo.type === 'error' ? 'text-danger' : 'text-success'}`}>
+                            {popupInfo.type === 'error' ? 'Error' : 'Success'}
+                        </h4>
+                        <p className="mb-4">{popupInfo.message}</p>
+                        <Button
+                            onClick={() => setPopupInfo({ ...popupInfo, show: false })}
+                            variant={popupInfo.type === 'error' ? 'danger' : 'primary'}
+                        >
+                            OK
+                        </Button>
+                    </Card>
+                </div>
+            )}
         </MainLayout>
     );
 };

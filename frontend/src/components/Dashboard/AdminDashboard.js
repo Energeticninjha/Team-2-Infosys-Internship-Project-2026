@@ -75,6 +75,8 @@ const AdminDashboard = ({ logout }) => {
     const [fleetStats, setFleetStats] = useState({ shiftActive: true, pendingAlerts: 0 });
     const [heatmapEnabled, setHeatmapEnabled] = useState(false);
     const [heatmapData, setHeatmapData] = useState([]);
+    const [popupInfo, setPopupInfo] = useState({ show: false, message: '', type: 'success' });
+    const [confirmInfo, setConfirmInfo] = useState({ show: false, id: null });
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -109,15 +111,22 @@ const AdminDashboard = ({ logout }) => {
         fetchBaseData();
     }, []);
 
-    const deleteUser = async (id) => {
-        if (window.confirm("Are you sure you want to delete this user?")) {
-            const token = localStorage.getItem('token');
-            try {
-                await axios.delete(`http://localhost:8083/api/admin/users/${id}`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setUsers(users.filter(u => u.id !== id));
-            } catch (error) { alert("Failed to delete user."); }
+    const deleteUser = (id) => {
+        setConfirmInfo({ show: true, id });
+    };
+
+    const proceedDelete = async () => {
+        const id = confirmInfo.id;
+        setConfirmInfo({ show: false, id: null });
+        const token = localStorage.getItem('token');
+        try {
+            await axios.delete(`http://localhost:8083/api/admin/users/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUsers(users.filter(u => u.id !== id));
+            setPopupInfo({ show: true, message: "User deleted successfully.", type: 'success' });
+        } catch (error) {
+            setPopupInfo({ show: true, message: "Failed to delete user.", type: 'error' });
         }
     };
 
@@ -488,7 +497,54 @@ const AdminDashboard = ({ logout }) => {
                     )}
                 </div>
             </div>
-        </div>
+
+
+            {/* Popup Modal */}
+            {
+                popupInfo.show && (
+                    <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1100, background: 'rgba(0,0,0,0.5)' }}>
+                        <div className="card shadow-lg p-4 text-center border-0 rounded-4" style={{ maxWidth: '400px', backgroundColor: 'white' }}>
+                            <h4 className={`mb-3 ${popupInfo.type === 'error' ? 'text-danger' : 'text-success'}`}>
+                                {popupInfo.type === 'error' ? 'Error' : 'Success'}
+                            </h4>
+                            <p className="mb-4">{popupInfo.message}</p>
+                            <button
+                                className={`btn ${popupInfo.type === 'error' ? 'btn-danger' : 'btn-primary'} w-100`}
+                                onClick={() => setPopupInfo({ ...popupInfo, show: false })}
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Confirm Modal */}
+            {
+                confirmInfo.show && (
+                    <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style={{ zIndex: 1100, background: 'rgba(0,0,0,0.5)' }}>
+                        <div className="card shadow-lg p-4 text-center border-0 rounded-4" style={{ maxWidth: '400px', backgroundColor: 'white' }}>
+                            <h4 className="mb-3 text-warning">Confirm Action</h4>
+                            <p className="mb-4">Are you sure you want to delete this user?</p>
+                            <div className="d-flex gap-2">
+                                <button
+                                    className="btn btn-secondary flex-fill"
+                                    onClick={() => setConfirmInfo({ show: false, id: null })}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    className="btn btn-danger flex-fill"
+                                    onClick={proceedDelete}
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 };
 
